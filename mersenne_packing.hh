@@ -70,6 +70,7 @@ struct MersenneRemapping
 	static constexpr int used_width = 8 * sizeof(used_word);
 	static constexpr int used_length = max_count / used_width + 1;
 	used_word used_values[used_length];
+	MersenneRemapping(){}
 	M31 find_unused(const M31 *dst, int count)
 	{
 		int limit = count / used_width + 1;

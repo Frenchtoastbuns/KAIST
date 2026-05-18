@@ -18,6 +18,7 @@ struct CauchyFermatErasureCoding
 	static constexpr int used_length = (MAX_LEN + used_width - 1) / used_width;
 	used_word used_values[used_length];
 	PF row_num, row_den;
+	CauchyFermatErasureCoding(){}
 	// $a_{ij} = \frac{1}{x_i + y_j}$
 	PF cauchy_matrix(int i, int j)
 	{
