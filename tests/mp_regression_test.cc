@@ -59,6 +59,7 @@ void cme_test(int trials)
 		for (int64_t i = 0; i < bytes; ++i)
 			tmp2[i] = i < bytes / 2 ? rnd_dat() : 255;
 		M31 sub = remap->encode(tmp0, tmp2, bytes);
+		assert(sub.v != M31::P);
 		for (int i = 0; i < count; ++i)
 			assert(tmp0[i].v != M31::P);
 		MP::decode(tmp3, tmp0, bytes, sub);
