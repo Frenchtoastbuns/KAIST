@@ -26,8 +26,8 @@ void cme_test(int trials)
 	auto rnd_m31 = std::bind(distribution(0, M31::P-1), generator);
 	auto rnd_dat = std::bind(distribution(0, 255), generator);
 	auto remap = new CODE::MersenneRemapping<bytes_max>();
-	M31 *tmp0 = new M31[count_max+1];
-	M31 *tmp1 = new M31[count_max+1];
+	M31 *tmp0 = new M31[count_max];
+	M31 *tmp1 = new M31[count_max];
 	uint8_t *tmp2 = new uint8_t[bytes_max];
 	uint8_t *tmp3 = new uint8_t[bytes_max];
 	for (int j = 0; j < trials; ++j) {
@@ -54,14 +54,14 @@ void cme_test(int trials)
 	}
 	for (int j = 0; j < trials; ++j) {
 		int64_t bytes = rnd_len();
-		int count = (bytes * 8 + 30) / 31 + 1;
+		int count = (bytes * 8 + 30) / 31;
 		// byte -> M31 -> byte
 		for (int64_t i = 0; i < bytes; ++i)
 			tmp2[i] = i < bytes / 2 ? rnd_dat() : 255;
-		remap->encode(tmp0, tmp2, bytes);
+		M31 sub = remap->encode(tmp0, tmp2, bytes);
 		for (int i = 0; i < count; ++i)
 			assert(tmp0[i].v != M31::P);
-		MP::decode(tmp3, tmp0, bytes);
+		MP::decode(tmp3, tmp0, bytes, sub);
 		for (int64_t i = 0; i < bytes; ++i)
 			assert(tmp2[i] == tmp3[i]);
 	}

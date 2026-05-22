@@ -41,10 +41,9 @@ struct MersennePacking
 			}
 		}
 	}
-	static void decode(uint8_t *dst, const M31 *src, int64_t bytes)
+	static void decode(uint8_t *dst, const M31 *src, int64_t bytes, M31 sub)
 	{
 		int count = (bytes * 8 + 30) / 31;
-		M31 sub = *src++;
 		uint64_t acc = 0;
 		int64_t pos = 0;
 		for (int i = 0, k = 0; i < count; i++) {
@@ -84,16 +83,16 @@ struct MersenneRemapping
 			++s;
 		return M31(s);
 	}
-	void encode(M31 *dst, const uint8_t *src, int64_t bytes)
+	M31 encode(M31 *dst, const uint8_t *src, int64_t bytes)
 	{
 		assert(bytes <= MAX_BYTES);
 		int count = (bytes * 8 + 30) / 31;
-		MersennePacking::pack(dst+1, src, count, bytes);
-		M31 sub = find_unused(dst+1, count);
-		*dst++ = sub;
+		MersennePacking::pack(dst, src, count, bytes);
+		M31 sub = find_unused(dst, count);
 		for (int i = 0; i < count; ++i)
 			if (dst[i].v == 0x7FFFFFFF)
 				dst[i] = sub;
+		return sub;
 	}
 };
 
