@@ -5,11 +5,9 @@
 - Branch: `research/osd-paged-vector`
 - Draft PR: #1
 - Baseline commit: `e6cfc5b0f71d8e82d6cba2184b1edf0486f64238`
-- Current phase: Phase 6 complete — software and RTL architecture evidence frozen
+- Current phase: Phase 6 complete — software, TEP-delivery, and RTL evidence frozen
 - Upstream production integration: not started
-- Latest focused CI: GitHub Actions run #64, passed
-- Known external experiment: `experiments/tep_delivery_modes.py` was described
-  by the researcher but is not present in this repository.
+- Latest focused CI before the TEP benchmark addition: GitHub Actions run #70, passed
 
 ## Claim boundary
 
@@ -51,6 +49,30 @@ they preprocess to no-ops and do not change the public API.
 The complete K=5 sequence matched the independent Python reference. The
 production case had no duplicate, missing, overweight, or out-of-range masks,
 and traversal state returned to zero.
+
+## Isolated TEP delivery
+
+A standalone Python benchmark now compares four delivery policies at K=64,
+order 4. It used 200 blocks, two warm-up blocks, five rotating-order repeats,
+and a checksum that consumed all 679,121 masks per block. Memory probes were
+separate from timing.
+
+| Mode | Median ms/block | P95 ms/block | Median TEP/s | Live payload |
+|---|---:|---:|---:|---:|
+| Regenerate per block | 116.484 | 120.279 | 5.830 M | 5,432,968 B |
+| Persistent full cache, warm | 19.437 | 20.834 | 34.939 M | 5,432,968 B |
+| Paged streaming, P=4096 | 146.974 | 185.113 | 4.621 M | 32,768 B |
+| Single-TEP streaming | 119.883 | 131.906 | 5.665 M | 8 B |
+
+The cache had a 98.490 ms median cold-build cost and was 5.99x faster than
+regeneration once warm. Paged delivery reduced live mask payload by 99.40% but
+was 1.26x slower in this Python implementation. Single streaming was 1.03x
+slower than regeneration.
+
+These are delivery-plus-checksum timings, not decoder or hardware speedups.
+The result makes full caching attractive for software when 5.18 MiB of
+persistent mask storage is acceptable, and bounded streaming attractive when
+memory or hardware interfaces dominate.
 
 ## Candidate-stage workload
 
