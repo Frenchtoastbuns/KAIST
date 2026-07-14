@@ -4,7 +4,7 @@
 
 - Branch: `research/osd-paged-vector`
 - Baseline commit: `e6cfc5b0f71d8e82d6cba2184b1edf0486f64238`
-- Current phase: Phase 2 complete — candidate search bottleneck measured
+- Current phase: Phase 3 complete — parity-only candidate model validated
 - Upstream production changes: none
 - Known external experiment: `experiments/tep_delivery_modes.py` was described by the researcher but is not present in this repository.
 
@@ -109,12 +109,45 @@ not FPGA, post-route, energy, or cross-platform results.
 GitHub Actions workflow status has still not been observed through the
 connector, so no CI success is claimed.
 
+## Phase 3 validation
+
+An incremental parity-only model now runs from the exact generator matrix,
+permuted soft values, base codeword, and permutation prepared by the production
+decoder. For every traversal flip it updates only the parity portion and adjusts
+the affected systematic metric term in constant work. For every candidate it
+rescans only parity positions.
+
+Exactness coverage:
+
+- all 32,768 hard-sign patterns for BCH(15,5), order 3;
+- three fixed-seed BCH(127,64), order-4 frames;
+- every candidate metric compared with the compiled production metric;
+- every systematic and parity candidate bit compared;
+- best metric, runner-up metric, tie/uniqueness result, winning candidate and
+  unpermuted decoded word compared;
+- traversal mask, parity state, and systematic metric restored after search.
+
+BCH(127,64), order-4 parity-only counts:
+
+- parity metric terms: 42,784,623 instead of 86,927,488 padded full-width terms;
+- parity flip XOR terms: 85,569,120 instead of 173,854,720 padded full-width terms;
+- systematic metric updates: one constant-size update per flip.
+
+A separate candidate-kernel benchmark used the same compile-time recursive
+traversal for full-width and parity-only engines. Seven repeats were taken for
+each of three fixed contexts. Observed full-width/parity-only median latency
+ratios were 1.71x, 1.73x, and 1.92x in the final full-suite run. These ratios
+show that the operation reduction survives in this controlled software kernel;
+they are not an integrated production-decoder speedup, an FPGA result, or an
+energy result.
+
+GitHub Actions workflow status has still not been observed through the
+connector, so no CI success is claimed.
+
 ## Immediate next actions
 
-1. Implement an exact parity-only candidate/scoring reference alongside the
-   unchanged upstream baseline.
-2. Validate every candidate metric, winning candidate, tie result, and decoded
-   word on exhaustive small cases and deterministic BCH(127,64) frames.
-3. Measure operation reduction before implementing page widths greater than 1.
-4. Retain the external TEP delivery-mode experiment only as a secondary memory
-   study; production profiling shows delivery alone is not the main cost.
+1. Implement exact bounded pages with widths 1, 2, 4, 8, and 16.
+2. Validate page coverage, order, boundaries, winning candidate, ties, and
+   decoded output against the scalar parity-only engine.
+3. Compare independent-lane construction with page-local delta expansion.
+4. Measure bounded live state and throughput scaling before considering RTL.
