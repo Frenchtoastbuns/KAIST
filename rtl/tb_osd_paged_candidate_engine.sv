@@ -10,6 +10,7 @@ module tb_osd_paged_candidate_engine;
 	reg [R-1:0] boundary_parity;
 	reg [K*R-1:0] parity_rows_flat;
 	reg [P*K-1:0] tep_masks_flat;
+	reg [$clog2(P+1)-1:0] valid_lanes;
 	reg [R*LLR_W-1:0] parity_llrs_flat;
 	reg signed [SCORE_W-1:0] systematic_base_score;
 	reg [K*SCORE_W-1:0] systematic_deltas_flat;
@@ -40,6 +41,7 @@ module tb_osd_paged_candidate_engine;
 		.boundary_parity(boundary_parity),
 		.parity_rows_flat(parity_rows_flat),
 		.tep_masks_flat(tep_masks_flat),
+		.valid_lanes(valid_lanes),
 		.parity_llrs_flat(parity_llrs_flat),
 		.systematic_base_score(systematic_base_score),
 		.systematic_deltas_flat(systematic_deltas_flat),
@@ -60,11 +62,12 @@ module tb_osd_paged_candidate_engine;
 		while (!$feof(vectors)) begin
 			fields = $fscanf(
 				vectors,
-				"%h %h %h %h %h %h %h %h %h %h %h\n",
+				"%h %h %h %h %h %h %h %h %h %h %h %h\n",
 				boundary_mask,
 				boundary_parity,
 				parity_rows_flat,
 				tep_masks_flat,
+				valid_lanes,
 				expected_candidates_flat,
 				expected_next_mask,
 				expected_next_parity,
@@ -73,7 +76,7 @@ module tb_osd_paged_candidate_engine;
 				systematic_deltas_flat,
 				expected_scores_flat
 			);
-			if (fields == 11) begin
+			if (fields == 12) begin
 				#1;
 				if (candidates_flat !== expected_candidates_flat)
 					$fatal(1, "candidate mismatch at case %0d", cases);
