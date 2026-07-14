@@ -4,7 +4,7 @@
 
 - Branch: `research/osd-paged-vector`
 - Baseline commit: `e6cfc5b0f71d8e82d6cba2184b1edf0486f64238`
-- Current phase: Phase 3 complete — parity-only candidate model validated
+- Current phase: Phase 4 complete — bounded paged models validated
 - Upstream production changes: none
 - Known external experiment: `experiments/tep_delivery_modes.py` was described by the researcher but is not present in this repository.
 
@@ -144,10 +144,52 @@ energy result.
 GitHub Actions workflow status has still not been observed through the
 connector, so no CI success is claimed.
 
+## Phase 4 validation
+
+Two exact page models process the production-order TEP stream:
+
+- independent lanes construct each parity candidate from the order-0 parity;
+- prefix-delta pages derive edge deltas between adjacent masks and expand
+  page-local cumulative parity deltas from a carried boundary state.
+
+For `P = 1, 2, 4, 8, 16`, both modes processed all 679,121 candidates and
+matched:
+
+- production mask sequence hash `9717451b3bb8a575`;
+- candidate-content/metric hash `c9da0a5ebdc96618`;
+- best and runner-up metrics;
+- tie/uniqueness result;
+- winning candidate and unpermuted production decoded word;
+- page count and final partial-page size.
+
+Because 679,121 is one more than a multiple of every tested power-of-two page
+width, the final page contained one candidate in all cases.
+
+Maximum modeled live payload bytes, excluding allocator/container metadata:
+
+| P | Independent | Prefix delta |
+|---:|---:|---:|
+| 1 | 71 | 260 |
+| 2 | 142 | 394 |
+| 4 | 284 | 662 |
+| 8 | 568 | 1,198 |
+| 16 | 1,136 | 2,270 |
+
+Sequential software times varied with page overhead and do not establish
+parallel speedup. In the final full-suite run, prefix-delta elapsed time fell
+from 218.3 ms at P=1 to 190.7 ms at P=16, while independent construction
+remained approximately 215-250 ms. These are model timings, not an integrated
+production, FPGA, or energy result.
+
+GitHub Actions workflow status has still not been observed through the
+connector, so no CI success is claimed.
+
 ## Immediate next actions
 
-1. Implement exact bounded pages with widths 1, 2, 4, 8, and 16.
-2. Validate page coverage, order, boundaries, winning candidate, ties, and
-   decoded output against the scalar parity-only engine.
-3. Compare independent-lane construction with page-local delta expansion.
-4. Measure bounded live state and throughput scaling before considering RTL.
+1. Freeze the Phase 0-4 raw results and write the reproducibility report.
+2. Add sanitizer coverage for the padded `W` state identified during source
+   inspection.
+3. Run the branch in a connected Codex or CI environment for independent
+   reproduction.
+4. Begin RTL only after an actual Verilog simulator is available; this current
+   execution environment has no Icarus Verilog, Verilator, or Yosys installed.
