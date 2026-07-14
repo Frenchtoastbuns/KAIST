@@ -1,192 +1,198 @@
-# Bit-exact paged OSD candidate engine: Phase 0-5 report
+# Bit-exact paged OSD candidate engine: Phase 0-6 report
 
 ## Decision
 
-Proceed to an RTL prototype of a parity-only, page-vector candidate and scoring
-engine, beginning with page width P=8 and retaining P=16 as the throughput-area
-comparison point.
+Proceed with an opt-in integration experiment using the sequential P=8
+parity-only prefix-delta engine. Keep P=16 as the mandatory throughput/area
+comparison and the upstream decoder as the bit-exact oracle.
 
-The software evidence supports the architecture strongly enough to justify RTL,
-but it does not yet support FPGA, energy, or end-to-end decoder speedup claims.
+Do not replace the production candidate loop yet. The current evidence supports
+software exactness, bounded state, RTL functional equivalence on golden pages,
+and generic synthesis feasibility. It does not support FPGA timing, energy, or
+end-to-end decoder acceleration claims.
 
 ## Research question
 
-Can an OSD implementation preserve the exact upstream candidate set, order,
-metrics, tie behavior, and decoded output while reducing candidate-state work
-and bounding the memory required for parallel candidate processing?
+Can the upstream BCH(127,64), order-4 OSD preserve its exact candidate set,
+order, metric, tie behavior, and decoded output while reducing candidate-state
+work and bounding the storage used for page-parallel processing?
 
-The reference is the upstream BCH(127,64), order-4
-`CODE::OrderedStatisticsDecoder`.
+## Baseline correction
 
-## Important baseline correction
+The upstream `CODE::OrderedStatisticsDecoder` already performs incremental
+candidate updates. `flip(j)` XORs generator row `G[j]` into the current
+candidate, and recursive backtracking restores state.
 
-The upstream decoder already uses incremental generator-row updates.
-`flip(j)` XORs row `G[j]` into the current candidate and the nested traversal
-restores state while backtracking.
+Generic parity-delta caching is therefore not a new contribution relative to
+this baseline. The defensible result is:
 
-Therefore, generic "parity-delta caching" is not a new contribution relative to
-this baseline. The defensible contribution is narrower:
+> bit-exact parity-only metric decomposition combined with bounded page
+> vectorisation, page-local prefix-delta expansion, and a parameterized
+> multi-cycle RTL realization.
 
-> a bit-exact parity-only scoring decomposition combined with bounded page
-> vectorisation and page-local prefix-delta expansion.
+## Findings
 
-## What was established
+### 1. Production TEP traversal is now captured directly
 
-### 1. Production traversal
+Compile-time opt-in hooks observe the actual C++ decoder. With hooks disabled,
+they compile to no-ops and leave the API unchanged.
 
-Opt-in hooks were added to the actual compiled decoder. With hooks undefined,
-the public API and traversal remain unchanged.
-
-The independent Python reference matched the compiled path:
-
-| Case | Candidates | Production/Python sequence hash |
+| Case | Candidate count | C++/Python sequence hash |
 |---|---:|---|
-| K=5, O=3 | 26 | `d1d09a68b627c23a` |
-| K=64, O=4 | 679,121 | `9717451b3bb8a575` |
+| K=5, order 3 | 26 | `d1d09a68b627c23a` |
+| K=64, order 4 | 679,121 | `9717451b3bb8a575` |
 
-The complete small-case ordered mask list matched exactly. The production case
-had no duplicates or invalid masks and covered the full combinatorial count.
+The independent Python traversal matched the complete small sequence and the
+production count/order fingerprint. No duplicate, missing, overweight, or
+out-of-range mask was observed, and state returned to zero.
 
-### 2. Measured bottleneck
+### 2. Candidate search is the measured software bottleneck
 
-On the recorded EPYC/G++ environment, candidate search consumed 99.0% of the
-median end-to-end software time for the instrumented decoder.
-
-For one BCH(127,64), order-4 block, the upstream candidate stage performed:
+One production block performs:
 
 - 679,121 metric evaluations;
 - 86,927,488 padded metric terms;
-- 1,358,240 generator-row flips;
+- 1,358,240 row flips;
 - 173,854,720 padded flip XOR terms.
 
-This result makes TEP delivery alone a secondary optimization target.
+Across nine fixed-seed frames on the recorded EPYC/G++ host, candidate search
+had an 11,161,850 ns median and occupied 99.014% of the 11,273,005 ns median
+decoder time. TEP delivery by itself is therefore a secondary target.
 
-### 3. Parity-only state and scoring
+### 3. Parity-only scoring is bit-exact in the tested scope
 
-The experimental model:
+The model stores and updates the 63 parity positions, updates the affected
+systematic metric contribution in constant work per flip, and scans only parity
+positions per candidate.
 
-- stores and updates only the 63 parity positions;
-- maintains the systematic contribution by updating one affected term per
-  traversal flip;
-- scans only parity positions during candidate evaluation;
-- preserves the upstream strict best/runner-up comparison.
-
-Exactness checks covered:
+Exactness covered:
 
 - all 32,768 hard-sign patterns for BCH(15,5), order 3;
-- three fixed-seed BCH(127,64), order-4 frames;
-- every candidate metric and candidate bit;
-- best metric, runner-up metric, ties, uniqueness, winning candidate and
-  unpermuted decoded word.
+- three fixed BCH(127,64), order-4 frames;
+- every candidate metric and bit;
+- best and runner-up metrics, ties, uniqueness, winner, and decoded output;
+- restored mask, parity, and systematic-metric state.
 
-For BCH(127,64), order 4, the model reduced:
+It reduced metric terms from 86,927,488 to 42,784,623 and parity flip terms from
+173,854,720 to 85,569,120. Controlled full-width/parity-only median kernel
+ratios were 1.90958x, 1.89930x, and 1.88252x. This is not an integrated decoder
+speedup.
 
-- metric scan terms from 86,927,488 to 42,784,623;
-- flip XOR terms from 173,854,720 to 85,569,120.
+### 4. Bounded pages preserve the production result
 
-In a controlled candidate-kernel comparison using identical traversal control,
-the parity-only variant was 1.88x-1.91x faster across the final three recorded
-contexts. This is not an integrated production-decoder speedup.
+Independent-lane and prefix-delta models were tested at P=1,2,4,8,16. Every
+mode processed all 679,121 candidates and matched:
 
-### 4. Bounded pages
-
-Independent-lane construction and prefix-delta expansion were evaluated at
-P=1,2,4,8,16.
-
-Every configuration matched:
-
-- all 679,121 candidates;
-- production-order mask hash `9717451b3bb8a575`;
-- candidate/metric content hash `c9da0a5ebdc96618`;
-- best and runner-up metrics;
+- mask sequence hash `9717451b3bb8a575`;
+- candidate/metric hash `c9da0a5ebdc96618`;
+- best and runner-up values;
 - tie and uniqueness behavior;
-- winning candidate and production decoded word;
-- page counts and final-page boundaries.
+- winning candidate and decoded output;
+- page count and the one-candidate final partial page.
 
-Modeled maximum live payload, excluding container metadata:
-
-| P | Independent bytes | Prefix-delta bytes |
+| P | Independent payload | Prefix-delta payload |
 |---:|---:|---:|
-| 1 | 71 | 260 |
-| 2 | 142 | 394 |
-| 4 | 284 | 662 |
-| 8 | 568 | 1,198 |
-| 16 | 1,136 | 2,270 |
+| 1 | 71 B | 260 B |
+| 2 | 142 B | 394 B |
+| 4 | 284 B | 662 B |
+| 8 | 568 B | 1,198 B |
+| 16 | 1,136 B | 2,270 B |
 
-P=8 is the recommended first RTL point because it exposes meaningful lane
-parallelism while keeping modeled prefix-delta state near 1.2 KiB. P=16 should
-be synthesized as the area/throughput comparison.
+Payload excludes allocator/container metadata.
 
-### 5. Padding correctness
+### 5. Padding was hardened
 
-Source isolation exposed an uninitialized-read risk: `metric()` and `flip()`
-operate over padded width `W`, while the padding of `G` and `codeword` was
-not initialized. The branch now zero-initializes only positions `N..W-1` in
-both OSD decoder classes. A targeted regression verifies zero matrix, candidate,
-and soft padding. All candidate hashes and exactness gates remained stable.
+`metric()` and `flip()` operate over padded width W. The branch now
+zero-initializes positions N..W-1 in `G` and `codeword` for both OSD classes.
+A targeted regression checks the padding, and all hashes and exactness gates
+remained stable.
+
+### 6. RTL exposed and resolved an area failure
+
+The first RTL implemented the whole P=8 prefix expansion and scoring page
+combinationally. It passed golden vectors but synthesized to 252,104 generic
+cells. This is an important negative result: direct full-page combinational
+realization is not a credible baseline.
+
+A multi-cycle design now:
+
+1. builds adjacent-mask parity deltas over K cycles;
+2. expands the page from the carried boundary;
+3. scores one parity position per cycle across P lanes;
+4. returns the final valid lane as the next boundary;
+5. masks invalid lanes on partial pages.
+
+Both implementations passed 128 deterministic Python golden-vector pages at
+K=5, R=10, P=4, including partial-page cases. The sequential test observed
+K+R+1 = 16 cycles/page.
+
+Generic Yosys 0.33 synthesis at K=64, R=63:
+
+| Architecture | P | Cycles/page | Cells | Peak Yosys memory |
+|---|---:|---:|---:|---:|
+| Combinational baseline | 8 | 0 | 252,104 | 1,167.50 MB |
+| Sequential | 1 | 128 | 11,480 | 280.84 MB |
+| Sequential | 8 | 128 | 21,890 | 525.73 MB |
+| Sequential | 16 | 128 | 33,894 | 1,203.20 MB |
+
+Sequential P8 is about 11.5x smaller than combinational P8. Nominal issue rate
+is P/128 candidates per cycle, giving 0.0625 for P8 and 0.125 for P16. P16
+doubles nominal lane throughput for 1.55x the generic cells, but no mapped
+frequency is available. P8 is consequently the safer first integration point,
+not a proven final optimum.
 
 ## Reproduction
 
-Focused validation:
+Software:
 
 ```text
 make -C experiments clean test CXX='g++ -march=x86-64'
 ```
 
-Recorded environment:
+Recorded software environment:
 
 - Linux 6.12.47, x86-64;
 - AMD EPYC 9V74;
 - G++ 13.3.0;
 - C++17 and `-O2`.
 
+GitHub Actions run #64 used Icarus Verilog 12.0 and Yosys 0.33. It built the
+upstream regression target, passed the bounded software suite, passed both RTL
+simulations, and synthesized P=1,8,16 with zero reported Yosys problems.
+
 Machine-readable results are under `experiments/results/`.
 
-## RTL architecture to implement next
+## Next gated experiment
 
-The initial P=8 design should contain:
-
-1. a bounded TEP page input buffer;
-2. adjacent-mask XOR generation;
-3. parity-row delta lookup;
-4. an eight-lane prefix-XOR expansion network;
-5. a page-boundary parity register;
-6. direct systematic metric generation from each TEP;
-7. eight parity metric reduction lanes;
-8. a deterministic best/runner-up and tie reduction;
-9. an output record containing best mask, best parity and score.
-
-The RTL testbench must compare every lane against the validated software model,
-including partial final pages and ties. Synthesis should compare P=1,8,16 and
-report frequency, LUT/ALM use, registers, memory blocks, cycles per page and
-estimated throughput.
+The next implementation should integrate only sequential P8 behind an opt-in
+interface and compare it candidate-by-candidate with the production loop. It
+must add deterministic best/runner-up/tie reduction, ready/valid backpressure,
+reset/restart checks, and randomized page boundaries. Only after that gate
+passes should P=1,8,16 be mapped to a named FPGA and compared using LUTs,
+registers, RAMs, Fmax, latency, and throughput.
 
 ## Limitations
 
-- Results come from one software host and compiler configuration.
-- Fixed-seed integer soft values were used for architecture validation; a later
-  benchmark should include reproducible BPSK-AWGN frames and multiple SNRs.
-- Page-model timings are sequential software timings, not parallel hardware
-  throughput.
-- No power or energy measurements were made.
-- No Verilog simulator or synthesizer was available in the current execution
-  environment.
-- The long stochastic upstream `tests/osd_regression_test.cc` was not executed
-  in the isolated partial checkout.
-- GitHub Actions run #34 passed the focused workflow on draft PR #1.
+- Software timing comes from one host and compiler configuration.
+- Fixed-seed integer soft values validate architecture; they are not an
+  end-to-end BPSK-AWGN performance study.
+- RTL simulation used K=5, R=10, P=4 vectors; production parameters were
+  elaborated by generic synthesis but not exhaustively simulated.
+- Yosys generic cells are not FPGA LUTs, ASIC area, or post-route timing.
+- No power or energy measurement was made.
+- The RTL produces per-lane candidates and scores; integrated best/runner-up
+  reduction and decoder control are not yet implemented.
+- The long stochastic upstream regression binary was built but not executed by
+  the bounded workflow.
 
-## Claim boundary
+## Supported claim
 
-The evidence currently supports:
+> For the tested upstream traversal, parity-only scoring and bounded
+> prefix-delta pages preserve candidate order, metrics, ties, and decoded output;
+> a multi-cycle parameterized RTL page engine matches deterministic golden pages
+> and reduces generic P8 synthesis cells by about 11.5x versus the direct
+> combinational realization.
 
-> exact software validation of parity-only metric decomposition and bounded
-> prefix-delta pages for the upstream OSD traversal.
-
-It does not yet support:
-
-- a novel OSD decoding algorithm;
-- novelty of incremental generator-row flipping;
-- FPGA acceleration;
-- end-to-end production speedup;
-- energy improvement;
-- post-route or silicon results.
+This does not claim a new OSD algorithm, novelty of generator-row flipping,
+FPGA acceleration, end-to-end speedup, energy improvement, post-route results,
+or silicon results.
