@@ -1,0 +1,7 @@
+kind,architecture,page_width,test_k,test_r,cases,partial_pages,cycles_per_page,generic_cells,peak_yosys_mb,result,source_run
+simulation,combinational,4,5,10,128,true,0,,,pass,64
+simulation,sequential,4,5,10,128,true,16,,,pass,64
+synthesis,combinational,8,64,63,,,,252104,1167.50,pass,45
+synthesis,sequential,1,64,63,,,128,11480,280.84,pass,64
+synthesis,sequential,8,64,63,,,128,21890,525.73,pass,64
+synthesis,sequential,16,64,63,,,128,33894,1203.20,pass,64
