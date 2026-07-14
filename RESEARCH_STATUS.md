@@ -73,8 +73,9 @@ Candidate-content stream hashes recorded by the compiled trace were
 BCH(127,64) case. These hashes are regression fingerprints, not proofs of
 correctness on their own.
 
-GitHub Actions workflow status has still not been observed through the
-connector, so no CI success is claimed.
+Independent GitHub Actions run #34 completed successfully on draft PR #1.
+It built the upstream OSD regression target, compiled the Python experiments,
+and ran the bounded research tests.
 
 ## Phase 2 validation
 
@@ -106,8 +107,9 @@ Every measured frame satisfied `sum(stage_times) <= total_time`. These values
 establish the candidate stage as the target on this software baseline; they are
 not FPGA, post-route, energy, or cross-platform results.
 
-GitHub Actions workflow status has still not been observed through the
-connector, so no CI success is claimed.
+Independent GitHub Actions run #34 completed successfully on draft PR #1.
+It built the upstream OSD regression target, compiled the Python experiments,
+and ran the bounded research tests.
 
 ## Phase 3 validation
 
@@ -141,8 +143,9 @@ show that the operation reduction survives in this controlled software kernel;
 they are not an integrated production-decoder speedup, an FPGA result, or an
 energy result.
 
-GitHub Actions workflow status has still not been observed through the
-connector, so no CI success is claimed.
+Independent GitHub Actions run #34 completed successfully on draft PR #1.
+It built the upstream OSD regression target, compiled the Python experiments,
+and ran the bounded research tests.
 
 ## Phase 4 validation
 
@@ -181,8 +184,9 @@ from 218.3 ms at P=1 to 190.7 ms at P=16, while independent construction
 remained approximately 215-250 ms. These are model timings, not an integrated
 production, FPGA, or energy result.
 
-GitHub Actions workflow status has still not been observed through the
-connector, so no CI success is claimed.
+Independent GitHub Actions run #34 completed successfully on draft PR #1.
+It built the upstream OSD regression target, compiled the Python experiments,
+and ran the bounded research tests.
 
 ## Phase 5 completion
 
@@ -199,9 +203,7 @@ support an FPGA, energy, or integrated production speedup claim.
 
 1. Connect this branch to a runner containing Icarus Verilog or Verilator and
    Yosys; none is installed in the current isolated execution environment.
-2. Independently rerun `make -C experiments clean test` in the connected
-   repository or GitHub CI.
-3. Implement the P=8 RTL only after the simulator is available so every RTL
+2. Implement the P=8 RTL only after the simulator is available so every RTL
    commit can be checked against the validated software model.
-4. Run the long upstream stochastic regression separately; it was not executed
-   in the partial local validation checkout.
+3. Run the long upstream stochastic regression separately; the CI workflow
+   compiled its target but intentionally ran only the bounded research suite.
