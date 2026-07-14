@@ -25,6 +25,11 @@ Copyright 2020 Ahmet Inan <inan@aicodix.de>
 #define CODE_OSD_INTERNAL_UNDEF_TRACE_CANDIDATE
 #endif
 
+#ifndef CODE_OSD_TRACE_READY
+#define CODE_OSD_TRACE_READY(matrix, hard, soft, permutation, length, dimension, width) ((void)0)
+#define CODE_OSD_INTERNAL_UNDEF_TRACE_READY
+#endif
+
 #ifndef CODE_OSD_PROFILE_BEGIN
 #define CODE_OSD_PROFILE_BEGIN(stage) ((void)0)
 #define CODE_OSD_INTERNAL_UNDEF_PROFILE_BEGIN
@@ -246,6 +251,7 @@ public:
 		encode();
 		CODE_OSD_PROFILE_END(6);
 		CODE_OSD_PROFILE_BEGIN(7);
+		CODE_OSD_TRACE_READY(G, codeword, softperm, perm, N, K, W);
 		CODE_OSD_TRACE_RESET();
 		for (int i = 0; i < N; ++i)
 			candidate[i] = codeword[i];
@@ -478,6 +484,11 @@ public:
 #ifdef CODE_OSD_INTERNAL_UNDEF_TRACE_CANDIDATE
 #undef CODE_OSD_TRACE_CANDIDATE
 #undef CODE_OSD_INTERNAL_UNDEF_TRACE_CANDIDATE
+#endif
+
+#ifdef CODE_OSD_INTERNAL_UNDEF_TRACE_READY
+#undef CODE_OSD_TRACE_READY
+#undef CODE_OSD_INTERNAL_UNDEF_TRACE_READY
 #endif
 
 #ifdef CODE_OSD_INTERNAL_UNDEF_PROFILE_BEGIN
