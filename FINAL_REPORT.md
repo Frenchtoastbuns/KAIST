@@ -46,6 +46,29 @@ The independent Python traversal matched the complete small sequence and the
 production count/order fingerprint. No duplicate, missing, overweight, or
 out-of-range mask was observed, and state returned to zero.
 
+### 1a. Isolated TEP delivery has a clear speed-memory trade-off
+
+The recreated delivery benchmark used 200 BCH(127,64), order-4 blocks, two
+warm-up blocks, five repeats, rotating mode order, and checksum consumption of
+every TEP. Sequence validation preceded timing and memory probes were separate.
+
+| Mode | Median ms/block | Median TEP/s | Live payload |
+|---|---:|---:|---:|
+| Regenerate | 116.484 | 5.830 M | 5,432,968 B |
+| Persistent cache, warm | 19.437 | 34.939 M | 5,432,968 B |
+| Paged P4096 | 146.974 | 4.621 M | 32,768 B |
+| Single TEP | 119.883 | 5.665 M | 8 B |
+
+The warm full cache was 5.99x faster than regeneration after a separately
+measured 98.490 ms median cold build. Paged streaming cut live mask payload by
+99.40% but was 1.26x slower in this Python implementation. Single streaming
+was 1.03x slower than regeneration.
+
+This result does not overturn the bottleneck finding below: the production
+decoder already generates and consumes candidates inside its compiled loop.
+The TEP benchmark isolates delivery policy and is most useful for software
+cache decisions and bounded hardware-interface design.
+
 ### 2. Candidate search is the measured software bottleneck
 
 One production block performs:
@@ -160,6 +183,12 @@ GitHub Actions run #64 used Icarus Verilog 12.0 and Yosys 0.33. It built the
 upstream regression target, passed the bounded software suite, passed both RTL
 simulations, and synthesized P=1,8,16 with zero reported Yosys problems.
 
+Full TEP-delivery reproduction:
+
+```text
+make -C experiments benchmark-tep
+```
+
 Machine-readable results are under `experiments/results/`.
 
 ## Next gated experiment
@@ -174,6 +203,8 @@ registers, RAMs, Fmax, latency, and throughput.
 ## Limitations
 
 - Software timing comes from one host and compiler configuration.
+- TEP delivery timings are Python implementation measurements and should not be
+  presented as compiled-decoder or hardware throughput.
 - Fixed-seed integer soft values validate architecture; they are not an
   end-to-end BPSK-AWGN performance study.
 - RTL simulation used K=5, R=10, P=4 vectors; production parameters were
