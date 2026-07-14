@@ -70,7 +70,7 @@ jobs:
             echo "No experiments/Makefile yet; baseline build only."
           fi
 
-      - name: Run RTL golden-vector simulation
+      - name: Run combinational RTL golden-vector simulation
         run: |
           python3 rtl/generate_rtl_vectors.py --output rtl/generated_vectors.txt
           iverilog -g2012 -s tb_osd_paged_candidate_engine \
@@ -82,12 +82,19 @@ jobs:
           vvp rtl/tb_osd_paged_candidate_engine.out \
             +VECTORS=rtl/generated_vectors.txt
 
-      - name: Synthesize default P8 candidate engine
+      - name: Run sequential RTL golden-vector simulation
+        run: |
+          iverilog -g2012 -s tb_osd_paged_candidate_engine_seq \
+            -o rtl/tb_osd_paged_candidate_engine_seq.out \
+            rtl/osd_paged_candidate_engine_seq.sv \
+            rtl/tb_osd_paged_candidate_engine_seq.sv
+          vvp rtl/tb_osd_paged_candidate_engine_seq.out \
+            +VECTORS=rtl/generated_vectors.txt
+
+      - name: Synthesize default sequential P8 candidate engine
         run: |
           yosys -p "read_verilog -sv \
-            rtl/osd_prefix_delta_page.sv \
-            rtl/osd_page_score.sv \
-            rtl/osd_paged_candidate_engine.sv; \
-            hierarchy -check -top osd_paged_candidate_engine; \
-            synth -top osd_paged_candidate_engine; \
+            rtl/osd_paged_candidate_engine_seq.sv; \
+            hierarchy -check -top osd_paged_candidate_engine_seq; \
+            synth -top osd_paged_candidate_engine_seq; \
             stat"
