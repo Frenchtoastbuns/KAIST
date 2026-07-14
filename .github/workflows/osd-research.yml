@@ -91,10 +91,15 @@ jobs:
           vvp rtl/tb_osd_paged_candidate_engine_seq.out \
             +VECTORS=rtl/generated_vectors.txt
 
-      - name: Synthesize default sequential P8 candidate engine
+      - name: Synthesize sequential P1 P8 P16 candidate engines
         run: |
-          yosys -p "read_verilog -sv \
-            rtl/osd_paged_candidate_engine_seq.sv; \
-            hierarchy -check -top osd_paged_candidate_engine_seq; \
-            synth -top osd_paged_candidate_engine_seq; \
-            stat"
+          for page in 1 8 16; do
+            echo "RTL_SYNTH_BEGIN P=${page}"
+            yosys -p "read_verilog -sv \
+              rtl/osd_paged_candidate_engine_seq.sv; \
+              chparam -set P ${page} osd_paged_candidate_engine_seq; \
+              hierarchy -check -top osd_paged_candidate_engine_seq; \
+              synth -top osd_paged_candidate_engine_seq; \
+              stat"
+            echo "RTL_SYNTH_END P=${page}"
+          done
