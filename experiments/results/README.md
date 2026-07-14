@@ -17,6 +17,6 @@ they do not represent parallel hardware throughput.
 
 The values are host- and implementation-specific. They are evidence for this
 software prototype, not FPGA post-route, silicon, energy, or cross-platform
-results. GitHub Actions success was not observed through the connector, and
-the original long stochastic upstream regression was not executed in this
-isolated partial checkout.
+results. GitHub Actions run #34 passed the focused workflow on draft PR #1. The
+workflow built the upstream OSD regression target and ran the bounded research
+tests, but it did not execute the original long stochastic regression binary.
