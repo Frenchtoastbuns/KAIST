@@ -37,3 +37,36 @@ GitHub Actions run #64 passed the full focused workflow on draft PR #1. The
 workflow built the upstream OSD regression target, ran the bounded research
 suite, checked both RTL implementations, and synthesized P=1,8,16. It did not
 execute the original long stochastic regression binary.
+
+
+## Isolated TEP delivery benchmark
+
+Command:
+
+```text
+python3 experiments/tep_delivery_modes.py --k 64 --order 4 \
+  --page-size 4096 --blocks 200 --warmup-blocks 2 --repeats 5 \
+  --output-dir experiments/results
+```
+
+The benchmark consumed all 679,121 masks in every block using a lightweight
+checksum. Execution order rotated between repeats. Sequence count and hash were
+validated against the production-order Python reference before timing.
+`tracemalloc` memory probes ran separately from timing.
+
+| Delivery mode | Median ms/block | P95 ms/block | Median TEP/s | Live payload |
+|---|---:|---:|---:|---:|
+| Regenerate per block | 116.484 | 120.279 | 5.830 M | 5,432,968 B |
+| Persistent full cache, warm | 19.437 | 20.834 | 34.939 M | 5,432,968 B |
+| Paged streaming, P=4096 | 146.974 | 185.113 | 4.621 M | 32,768 B |
+| Single-TEP streaming | 119.883 | 131.906 | 5.665 M | 8 B |
+
+The persistent cache had a separately measured median cold-build cost of
+98.490 ms and occupied 5,432,968 bytes. Warm delivery was 5.99x faster than
+regeneration. Paged streaming reduced live mask payload by 99.40% but was
+1.26x slower in this Python implementation. Single streaming was 1.03x slower
+than regeneration while retaining only one mask payload.
+
+These timings isolate Python TEP generation/delivery plus checksum consumption.
+They do not include candidate construction, scoring, decoder integration, FPGA
+execution, or energy.
