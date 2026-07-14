@@ -4,7 +4,7 @@
 
 - Branch: `research/osd-paged-vector`
 - Baseline commit: `e6cfc5b0f71d8e82d6cba2184b1edf0486f64238`
-- Current phase: Phase 1 complete — production TEP traversal validated
+- Current phase: Phase 2 complete — candidate search bottleneck measured
 - Upstream production changes: none
 - Known external experiment: `experiments/tep_delivery_modes.py` was described by the researcher but is not present in this repository.
 
@@ -76,10 +76,45 @@ correctness on their own.
 GitHub Actions workflow status has still not been observed through the
 connector, so no CI success is claimed.
 
+## Phase 2 validation
+
+Separate timing and operation-count builds were used so per-candidate counters
+do not contaminate the reported stage timings. The exact branch state was
+rebuilt and tested with G++ 13.3.0, `-O2`, and C++17 on an AMD EPYC 9V74 Linux
+host. Inputs used a fixed xorshift seed, two warm-ups, and nine measured
+BCH(127,64), order-4 blocks.
+
+Observed operation counts per production block:
+
+- candidate/metric evaluations: 679,121;
+- metric terms over padded width 128: 86,927,488;
+- generator-row flip calls: 1,358,240;
+- flip XOR terms over padded width 128: 173,854,720;
+- candidate update decisions after the order-0 candidate: 679,120.
+
+Observed timing summary for this host and build only:
+
+- median total: 10,475,002 ns;
+- p95 total across nine measured frames: 13,446,053 ns;
+- median candidate-search time: 10,381,033 ns;
+- median candidate-search share: 99.10%;
+- median row-echelon time: 45,217 ns;
+- median systematic-conversion time: 34,211 ns;
+- median unaccounted timing overhead: 420 ns.
+
+Every measured frame satisfied `sum(stage_times) <= total_time`. These values
+establish the candidate stage as the target on this software baseline; they are
+not FPGA, post-route, energy, or cross-platform results.
+
+GitHub Actions workflow status has still not been observed through the
+connector, so no CI success is claimed.
+
 ## Immediate next actions
 
-1. Add stage and operation-count instrumentation for Phase 2.
-2. Establish deterministic benchmark inputs and warm-up/repeat policy.
-3. Measure preprocessing, flip, metric, and update costs separately.
-4. Import or replace the unpushed delivery-mode experiment only where it
-   remains relevant after production profiling.
+1. Implement an exact parity-only candidate/scoring reference alongside the
+   unchanged upstream baseline.
+2. Validate every candidate metric, winning candidate, tie result, and decoded
+   word on exhaustive small cases and deterministic BCH(127,64) frames.
+3. Measure operation reduction before implementing page widths greater than 1.
+4. Retain the external TEP delivery-mode experiment only as a secondary memory
+   study; production profiling shows delivery alone is not the main cost.
