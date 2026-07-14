@@ -1,0 +1,16 @@
+TEP delivery benchmark
+python=3.12.13
+platform=Linux-6.12.47-x86_64-with-glibc2.39
+cpu=AMD EPYC 9V74 80-Core Processor
+k=64 order=4
+candidates_per_block=679121
+page_size=4096
+blocks=200 repeats=5
+osd_inline_loops_detected=2
+direct_production_sequence=validated_separately_by_tep_trace_test
+timing_scope=TEP_delivery_plus_lightweight_checksum_only
+persistent_cache_cold_build_median_ms=98.489614
+regenerate_per_block: median_ms_per_block=116.484426 p95_ms_per_block=120.279250 median_teps_per_second=5830144.190 peak_tracemalloc_bytes=5690176 largest_payload_bytes=5432968
+persistent_full_cache: median_ms_per_block=19.437206 p95_ms_per_block=20.833558 median_teps_per_second=34939229.731 peak_tracemalloc_bytes=5690136 largest_payload_bytes=5432968
+paged_streaming_p4096: median_ms_per_block=146.973892 p95_ms_per_block=185.113172 median_teps_per_second=4620691.404 peak_tracemalloc_bytes=70720 largest_payload_bytes=32768
+single_tep_streaming: median_ms_per_block=119.883411 p95_ms_per_block=131.906486 median_teps_per_second=5664845.492 peak_tracemalloc_bytes=2212 largest_payload_bytes=8
