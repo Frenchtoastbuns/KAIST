@@ -25,6 +25,31 @@ Copyright 2020 Ahmet Inan <inan@aicodix.de>
 #define CODE_OSD_INTERNAL_UNDEF_TRACE_CANDIDATE
 #endif
 
+#ifndef CODE_OSD_PROFILE_BEGIN
+#define CODE_OSD_PROFILE_BEGIN(stage) ((void)0)
+#define CODE_OSD_INTERNAL_UNDEF_PROFILE_BEGIN
+#endif
+
+#ifndef CODE_OSD_PROFILE_END
+#define CODE_OSD_PROFILE_END(stage) ((void)0)
+#define CODE_OSD_INTERNAL_UNDEF_PROFILE_END
+#endif
+
+#ifndef CODE_OSD_PROFILE_FLIP
+#define CODE_OSD_PROFILE_FLIP(width) ((void)0)
+#define CODE_OSD_INTERNAL_UNDEF_PROFILE_FLIP
+#endif
+
+#ifndef CODE_OSD_PROFILE_METRIC
+#define CODE_OSD_PROFILE_METRIC(width) ((void)0)
+#define CODE_OSD_INTERNAL_UNDEF_PROFILE_METRIC
+#endif
+
+#ifndef CODE_OSD_PROFILE_UPDATE
+#define CODE_OSD_PROFILE_UPDATE(outcome) ((void)0)
+#define CODE_OSD_INTERNAL_UNDEF_PROFILE_UPDATE
+#endif
+
 namespace CODE {
 
 template <int N, int K>
@@ -173,12 +198,14 @@ class OrderedStatisticsDecoder
 	}
 	void flip(int j)
 	{
+		CODE_OSD_PROFILE_FLIP(W);
 		for (int i = 0; i < W; ++i)
 			codeword[i] ^= G[W*j+i];
 		CODE_OSD_TRACE_FLIP(j);
 	}
 	static int metric(const int8_t *hard, const int8_t *soft)
 	{
+		CODE_OSD_PROFILE_METRIC(W);
 		int sum = 0;
 		for (int i = 0; i < W; ++i)
 			sum += (1 - 2 * hard[i]) * soft[i];
@@ -187,23 +214,38 @@ class OrderedStatisticsDecoder
 public:
 	bool operator()(uint8_t *hard, const int8_t *soft, const int8_t *genmat)
 	{
+		CODE_OSD_PROFILE_BEGIN(0);
 		for (int i = 0; i < N; ++i)
 			perm[i] = i;
 		for (int i = 0; i < N; ++i)
 			softperm[i] = std::abs(std::max<int8_t>(soft[i], -127));
+		CODE_OSD_PROFILE_END(0);
+		CODE_OSD_PROFILE_BEGIN(1);
 		sort(perm, N, [this](int a, int b){ return softperm[a] > softperm[b]; });
+		CODE_OSD_PROFILE_END(1);
+		CODE_OSD_PROFILE_BEGIN(2);
 		for (int j = 0; j < K; ++j)
 			for (int i = 0; i < N; ++i)
 				G[W*j+i] = genmat[N*j+perm[i]];
+		CODE_OSD_PROFILE_END(2);
+		CODE_OSD_PROFILE_BEGIN(3);
 		row_echelon();
+		CODE_OSD_PROFILE_END(3);
+		CODE_OSD_PROFILE_BEGIN(4);
 		systematic();
+		CODE_OSD_PROFILE_END(4);
+		CODE_OSD_PROFILE_BEGIN(5);
 		for (int i = 0; i < N; ++i)
 			softperm[i] = std::max<int8_t>(soft[perm[i]], -127);
 		for (int i = N; i < W; ++i)
 			softperm[i] = 0;
+		CODE_OSD_PROFILE_END(5);
+		CODE_OSD_PROFILE_BEGIN(6);
 		for (int i = 0; i < K; ++i)
 			codeword[i] = softperm[i] < 0;
 		encode();
+		CODE_OSD_PROFILE_END(6);
+		CODE_OSD_PROFILE_BEGIN(7);
 		CODE_OSD_TRACE_RESET();
 		for (int i = 0; i < N; ++i)
 			candidate[i] = codeword[i];
@@ -214,12 +256,16 @@ public:
 			int met = metric(codeword, softperm);
 			CODE_OSD_TRACE_CANDIDATE(codeword, softperm, N, W, met);
 			if (met > best) {
+				CODE_OSD_PROFILE_UPDATE(2);
 				next = best;
 				best = met;
 				for (int i = 0; i < N; ++i)
 					candidate[i] = codeword[i];
 			} else if (met > next) {
+				CODE_OSD_PROFILE_UPDATE(1);
 				next = met;
+			} else {
+				CODE_OSD_PROFILE_UPDATE(0);
 			}
 		};
 		for (int a = 0; O >= 1 && a < K; ++a) {
@@ -252,8 +298,11 @@ public:
 			}
 			flip(a);
 		}
+		CODE_OSD_PROFILE_END(7);
+		CODE_OSD_PROFILE_BEGIN(8);
 		for (int i = 0; i < N; ++i)
 			set_be_bit(hard, perm[i], candidate[i]);
+		CODE_OSD_PROFILE_END(8);
 		return best != next;
 	}
 };
@@ -431,3 +480,27 @@ public:
 #undef CODE_OSD_INTERNAL_UNDEF_TRACE_CANDIDATE
 #endif
 
+#ifdef CODE_OSD_INTERNAL_UNDEF_PROFILE_BEGIN
+#undef CODE_OSD_PROFILE_BEGIN
+#undef CODE_OSD_INTERNAL_UNDEF_PROFILE_BEGIN
+#endif
+
+#ifdef CODE_OSD_INTERNAL_UNDEF_PROFILE_END
+#undef CODE_OSD_PROFILE_END
+#undef CODE_OSD_INTERNAL_UNDEF_PROFILE_END
+#endif
+
+#ifdef CODE_OSD_INTERNAL_UNDEF_PROFILE_FLIP
+#undef CODE_OSD_PROFILE_FLIP
+#undef CODE_OSD_INTERNAL_UNDEF_PROFILE_FLIP
+#endif
+
+#ifdef CODE_OSD_INTERNAL_UNDEF_PROFILE_METRIC
+#undef CODE_OSD_PROFILE_METRIC
+#undef CODE_OSD_INTERNAL_UNDEF_PROFILE_METRIC
+#endif
+
+#ifdef CODE_OSD_INTERNAL_UNDEF_PROFILE_UPDATE
+#undef CODE_OSD_PROFILE_UPDATE
+#undef CODE_OSD_INTERNAL_UNDEF_PROFILE_UPDATE
+#endif
