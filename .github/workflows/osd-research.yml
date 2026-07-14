@@ -1,0 +1,62 @@
+name: OSD research validation
+
+on:
+  push:
+    branches:
+      - research/osd-paged-vector
+    paths:
+      - "osd.hh"
+      - "bitman.hh"
+      - "sort.hh"
+      - "experiments/**"
+      - "tests/osd_regression_test.cc"
+      - "tests/Makefile"
+      - ".github/workflows/osd-research.yml"
+  pull_request:
+    paths:
+      - "osd.hh"
+      - "bitman.hh"
+      - "sort.hh"
+      - "experiments/**"
+      - "tests/osd_regression_test.cc"
+      - "tests/Makefile"
+      - ".github/workflows/osd-research.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: osd-research-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  focused-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          g++ --version
+          python3 --version
+
+      - name: Build upstream OSD regression target
+        run: make -C tests osd_regression_test CXX="g++ -march=x86-64"
+
+      - name: Compile Python experiments
+        run: |
+          if [ -d experiments ]; then
+            python3 -m compileall -q experiments
+          fi
+
+      - name: Run bounded research tests
+        run: |
+          if [ -f experiments/Makefile ]; then
+            make -C experiments test CXX="g++ -march=x86-64"
+          else
+            echo "No experiments/Makefile yet; baseline build only."
+          fi
