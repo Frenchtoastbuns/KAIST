@@ -173,7 +173,7 @@ estimated throughput.
   environment.
 - The long stochastic upstream `tests/osd_regression_test.cc` was not executed
   in the isolated partial checkout.
-- GitHub Actions success was not observed through the connector.
+- GitHub Actions run #34 passed the focused workflow on draft PR #1.
 
 ## Claim boundary
 
