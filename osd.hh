@@ -232,6 +232,9 @@ public:
 		for (int j = 0; j < K; ++j)
 			for (int i = 0; i < N; ++i)
 				G[W*j+i] = genmat[N*j+perm[i]];
+		for (int j = 0; j < K; ++j)
+			for (int i = N; i < W; ++i)
+				G[W*j+i] = 0;
 		CODE_OSD_PROFILE_END(2);
 		CODE_OSD_PROFILE_BEGIN(3);
 		row_echelon();
@@ -249,6 +252,8 @@ public:
 		for (int i = 0; i < K; ++i)
 			codeword[i] = softperm[i] < 0;
 		encode();
+		for (int i = N; i < W; ++i)
+			codeword[i] = 0;
 		CODE_OSD_PROFILE_END(6);
 		CODE_OSD_PROFILE_BEGIN(7);
 		CODE_OSD_TRACE_READY(G, codeword, softperm, perm, N, K, W);
@@ -413,6 +418,9 @@ public:
 		for (int j = 0; j < K; ++j)
 			for (int i = 0; i < N; ++i)
 				G[W*j+i] = genmat[N*j+perm[i]];
+		for (int j = 0; j < K; ++j)
+			for (int i = N; i < W; ++i)
+				G[W*j+i] = 0;
 		row_echelon();
 		systematic();
 		for (int i = 0; i < N; ++i)
@@ -422,6 +430,8 @@ public:
 		for (int i = 0; i < K; ++i)
 			codeword[i] = softperm[i] < 0;
 		encode();
+		for (int i = N; i < W; ++i)
+			codeword[i] = 0;
 		for (int i = 0; i < W; ++i)
 			candidate[i] = codeword[i];
 		score[0] = metric();
