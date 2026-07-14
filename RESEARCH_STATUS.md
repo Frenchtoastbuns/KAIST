@@ -4,7 +4,7 @@
 
 - Branch: `research/osd-paged-vector`
 - Baseline commit: `e6cfc5b0f71d8e82d6cba2184b1edf0486f64238`
-- Current phase: Phase 4 complete — bounded paged models validated
+- Current phase: Phase 5 complete — evidence frozen; RTL awaiting toolchain
 - Upstream production changes: none
 - Known external experiment: `experiments/tep_delivery_modes.py` was described by the researcher but is not present in this repository.
 
@@ -184,12 +184,24 @@ production, FPGA, or energy result.
 GitHub Actions workflow status has still not been observed through the
 connector, so no CI success is claimed.
 
-## Immediate next actions
+## Phase 5 completion
 
-1. Freeze the Phase 0-4 raw results and write the reproducibility report.
-2. Add sanitizer coverage for the padded `W` state identified during source
-   inspection.
-3. Run the branch in a connected Codex or CI environment for independent
-   reproduction.
-4. Begin RTL only after an actual Verilog simulator is available; this current
-   execution environment has no Icarus Verilog, Verilator, or Yosys installed.
+The final full-suite execution passed after deterministic initialization was
+added for padded matrix and codeword positions. Machine-readable outputs are
+stored in `experiments/results/`, and the decision record is in
+`FINAL_REPORT.md`.
+
+The evidence supports proceeding with a P=8 parity-only prefix-delta RTL
+prototype and synthesizing P=1 and P=16 comparison points. It does not yet
+support an FPGA, energy, or integrated production speedup claim.
+
+## Current blocker and next actions
+
+1. Connect this branch to a runner containing Icarus Verilog or Verilator and
+   Yosys; none is installed in the current isolated execution environment.
+2. Independently rerun `make -C experiments clean test` in the connected
+   repository or GitHub CI.
+3. Implement the P=8 RTL only after the simulator is available so every RTL
+   commit can be checked against the validated software model.
+4. Run the long upstream stochastic regression separately; it was not executed
+   in the partial local validation checkout.
