@@ -2,4 +2,6 @@
 experiments/*_test
 experiments/candidate_stage_benchmark
 experiments/__pycache__/
+rtl/generated_vectors.txt
+rtl/*.out
 *.pyc
