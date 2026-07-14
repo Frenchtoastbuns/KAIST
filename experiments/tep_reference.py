@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 from dataclasses import dataclass
 from typing import Iterator
 
@@ -48,11 +49,29 @@ class Summary:
 def summarize(k: int, order: int) -> Summary:
     count = 0
     mask_hash = FNV_OFFSET
+    seen: set[int] = set()
     for mask in iter_teps(k, order):
         if mask >> k:
             raise AssertionError(f"invalid mask {mask:#x} for k={k}")
+        if mask.bit_count() > order:
+            raise AssertionError(
+                f"mask {mask:#x} exceeds order {order}"
+            )
+        if mask in seen:
+            raise AssertionError(f"duplicate mask {mask:#x}")
+        seen.add(mask)
         count += 1
         mask_hash = mix_u64(mask_hash, mask)
+    expected = sum(math.comb(k, weight) for weight in range(order + 1))
+    if count != expected:
+        raise AssertionError(
+            f"missing masks for k={k}, order={order}: "
+            f"observed {count}, expected {expected}"
+        )
+    if len(seen) != expected:
+        raise AssertionError(
+            f"unique-mask count {len(seen)} does not equal {expected}"
+        )
     return Summary(k=k, order=order, count=count, mask_hash=mask_hash)
 
 
