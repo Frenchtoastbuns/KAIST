@@ -39,18 +39,20 @@ def generate_case(rng: random.Random) -> list[int]:
     boundary_parity = rng.randrange(1 << R)
     rows = [rng.randrange(1 << R) for _ in range(K)]
     masks = [rng.randrange(1 << K) for _ in range(P)]
+    valid_lanes = rng.randint(1, P)
 
-    candidates: list[int] = []
+    candidates = [0] * P
     previous_mask = boundary_mask
     prefix_delta = 0
-    for mask in masks:
+    for lane in range(valid_lanes):
+        mask = masks[lane]
         edge_mask = previous_mask ^ mask
         prefix_delta ^= parity_delta(rows, edge_mask)
-        candidates.append(boundary_parity ^ prefix_delta)
+        candidates[lane] = boundary_parity ^ prefix_delta
         previous_mask = mask
 
-    next_mask = masks[-1]
-    next_parity = candidates[-1]
+    next_mask = masks[valid_lanes - 1]
+    next_parity = candidates[valid_lanes - 1]
 
     parity_llrs = [
         rng.choice([value for value in range(-127, 128) if value])
@@ -59,21 +61,24 @@ def generate_case(rng: random.Random) -> list[int]:
     systematic_base = rng.randint(-1000, 1000)
     systematic_deltas = [rng.randint(-254, 254) for _ in range(K)]
 
-    scores: list[int] = []
-    for mask, candidate in zip(masks, candidates):
+    scores = [0] * P
+    for lane in range(valid_lanes):
+        mask = masks[lane]
+        candidate = candidates[lane]
         score = systematic_base
         for index, delta in enumerate(systematic_deltas):
             if (mask >> index) & 1:
                 score += delta
         for index, llr in enumerate(parity_llrs):
             score += -llr if (candidate >> index) & 1 else llr
-        scores.append(score)
+        scores[lane] = score
 
     return [
         boundary_mask,
         boundary_parity,
         pack(rows, R),
         pack(masks, K),
+        valid_lanes,
         pack(candidates, R),
         next_mask,
         next_parity,
