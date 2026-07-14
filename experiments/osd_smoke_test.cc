@@ -1,6 +1,11 @@
+#include <algorithm>
 #include <cassert>
+#include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <initializer_list>
+#include <iostream>
+#include <utility>
 
 #include "bitman.hh"
 #include "osd.hh"
