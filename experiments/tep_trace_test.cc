@@ -7,6 +7,7 @@
 #include <initializer_list>
 #include <iostream>
 #include <utility>
+#include <vector>
 
 namespace {
 
@@ -21,6 +22,8 @@ struct TraceState {
 };
 
 TraceState trace;
+bool capture_masks = false;
+std::vector<uint64_t> captured_masks;
 
 void mix_byte(uint64_t &hash, uint8_t value)
 {
@@ -39,6 +42,7 @@ void osd_trace_reset()
 	trace = {};
 	trace.mask_hash = FNV_OFFSET;
 	trace.candidate_hash = FNV_OFFSET;
+	captured_masks.clear();
 }
 
 void osd_trace_flip(int index)
@@ -62,6 +66,8 @@ void osd_trace_candidate(
 	assert(recomputed == metric);
 
 	++trace.candidate_count;
+	if (capture_masks)
+		captured_masks.push_back(trace.mask);
 	mix_u64(trace.mask_hash, trace.mask);
 	mix_u64(trace.candidate_hash, trace.mask);
 	for (int i = 0; i < length; ++i)
@@ -120,6 +126,7 @@ TraceState run_case(
 
 	uint8_t decoded[(N + 7) / 8] = {};
 	CODE::OrderedStatisticsDecoder<N, K, O> decoder;
+	capture_masks = K <= 8;
 	const bool unique = decoder(decoded, soft, genmat);
 
 	assert(unique);
@@ -150,7 +157,12 @@ int main()
 	const auto small = run_case<15, 5, 3>(
 		{0b10011, 0b11111, 0b00111}
 	);
+	const auto small_masks = captured_masks;
 	print_summary(5, 3, small);
+	std::cout << "MASKS 5 3";
+	for (const uint64_t mask: small_masks)
+		std::cout << ' ' << std::hex << mask;
+	std::cout << std::dec << '\n';
 
 	const auto production = run_case<127, 64, 4>({
 		0b10001001, 0b10001111, 0b10011101,
