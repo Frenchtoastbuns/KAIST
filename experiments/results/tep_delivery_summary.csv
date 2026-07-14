@@ -1,0 +1,5 @@
+mode,k,order,page_size,blocks_per_repeat,repeats,median_ms_per_block,p95_ms_per_block,median_teps_per_second,peak_tracemalloc_bytes,largest_live_payload_bytes,cache_build_ms,cache_bytes,result
+regenerate_per_block,64,4,,200,5,116.484426,120.279250,5830144.190,5690176,5432968,0.000000,0,pass
+persistent_full_cache,64,4,,200,5,19.437206,20.833558,34939229.731,5690136,5432968,98.489614,5432968,pass
+paged_streaming_p4096,64,4,4096,200,5,146.973892,185.113172,4620691.404,70720,32768,0.000000,0,pass
+single_tep_streaming,64,4,,200,5,119.883411,131.906486,5664845.492,2212,8,0.000000,0,pass
