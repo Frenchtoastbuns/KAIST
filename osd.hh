@@ -10,6 +10,21 @@ Copyright 2020 Ahmet Inan <inan@aicodix.de>
 #include "bitman.hh"
 #include "sort.hh"
 
+#ifndef CODE_OSD_TRACE_RESET
+#define CODE_OSD_TRACE_RESET() ((void)0)
+#define CODE_OSD_INTERNAL_UNDEF_TRACE_RESET
+#endif
+
+#ifndef CODE_OSD_TRACE_FLIP
+#define CODE_OSD_TRACE_FLIP(index) ((void)0)
+#define CODE_OSD_INTERNAL_UNDEF_TRACE_FLIP
+#endif
+
+#ifndef CODE_OSD_TRACE_CANDIDATE
+#define CODE_OSD_TRACE_CANDIDATE(hard, soft, length, width, value) ((void)0)
+#define CODE_OSD_INTERNAL_UNDEF_TRACE_CANDIDATE
+#endif
+
 namespace CODE {
 
 template <int N, int K>
@@ -160,6 +175,7 @@ class OrderedStatisticsDecoder
 	{
 		for (int i = 0; i < W; ++i)
 			codeword[i] ^= G[W*j+i];
+		CODE_OSD_TRACE_FLIP(j);
 	}
 	static int metric(const int8_t *hard, const int8_t *soft)
 	{
@@ -188,12 +204,15 @@ public:
 		for (int i = 0; i < K; ++i)
 			codeword[i] = softperm[i] < 0;
 		encode();
+		CODE_OSD_TRACE_RESET();
 		for (int i = 0; i < N; ++i)
 			candidate[i] = codeword[i];
 		int best = metric(codeword, softperm);
+		CODE_OSD_TRACE_CANDIDATE(codeword, softperm, N, W, best);
 		int next = -1;
 		auto update = [this, &best, &next]() {
 			int met = metric(codeword, softperm);
+			CODE_OSD_TRACE_CANDIDATE(codeword, softperm, N, W, met);
 			if (met > best) {
 				next = best;
 				best = met;
@@ -396,4 +415,19 @@ public:
 };
 
 }
+
+#ifdef CODE_OSD_INTERNAL_UNDEF_TRACE_RESET
+#undef CODE_OSD_TRACE_RESET
+#undef CODE_OSD_INTERNAL_UNDEF_TRACE_RESET
+#endif
+
+#ifdef CODE_OSD_INTERNAL_UNDEF_TRACE_FLIP
+#undef CODE_OSD_TRACE_FLIP
+#undef CODE_OSD_INTERNAL_UNDEF_TRACE_FLIP
+#endif
+
+#ifdef CODE_OSD_INTERNAL_UNDEF_TRACE_CANDIDATE
+#undef CODE_OSD_TRACE_CANDIDATE
+#undef CODE_OSD_INTERNAL_UNDEF_TRACE_CANDIDATE
+#endif
 
