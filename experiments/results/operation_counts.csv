@@ -1,0 +1,3 @@
+k,order,candidates,metric_calls,metric_terms_padded,flip_calls,flip_xor_terms_padded,update_no_change,update_runner_up,update_best
+5,3,26,26,416,50,800,24,1,0
+64,4,679121,679121,86927488,1358240,173854720,679113,7,0
