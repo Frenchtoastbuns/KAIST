@@ -1,0 +1,5 @@
+mode,k,order,candidate_count,sequence_hash,duplicates,missing_masks,invalid_masks,result
+regenerate_per_block,64,4,679121,9717451b3bb8a575,0,0,0,pass
+persistent_full_cache,64,4,679121,9717451b3bb8a575,0,0,0,pass
+paged_streaming_p4096,64,4,679121,9717451b3bb8a575,0,0,0,pass
+single_tep_streaming,64,4,679121,9717451b3bb8a575,0,0,0,pass

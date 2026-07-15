@@ -1,1 +1,8 @@
 .*.swp
+experiments/*_test
+experiments/candidate_stage_benchmark
+experiments/combined_decoder_benchmark
+experiments/__pycache__/
+rtl/generated_vectors.txt
+rtl/*.out
+*.pyc

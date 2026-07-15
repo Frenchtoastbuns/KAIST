@@ -1,0 +1,105 @@
+name: OSD research validation
+
+on:
+  push:
+    branches:
+      - research/osd-paged-vector
+    paths:
+      - "osd.hh"
+      - "bitman.hh"
+      - "sort.hh"
+      - "experiments/**"
+      - "tests/osd_regression_test.cc"
+      - "tests/Makefile"
+      - ".github/workflows/osd-research.yml"
+      - "rtl/**"
+  pull_request:
+    paths:
+      - "osd.hh"
+      - "bitman.hh"
+      - "sort.hh"
+      - "experiments/**"
+      - "tests/osd_regression_test.cc"
+      - "tests/Makefile"
+      - ".github/workflows/osd-research.yml"
+      - "rtl/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: osd-research-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  focused-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install RTL tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq iverilog yosys
+
+      - name: Show toolchain
+        run: |
+          g++ --version
+          python3 --version
+          iverilog -V | head -n 1
+          yosys -V
+
+      - name: Build upstream OSD regression target
+        run: make -C tests osd_regression_test CXX="g++ -march=x86-64"
+
+      - name: Compile Python experiments
+        run: |
+          if [ -d experiments ]; then
+            python3 -m compileall -q experiments
+          fi
+
+      - name: Run bounded research tests
+        run: |
+          if [ -f experiments/Makefile ]; then
+            make -C experiments test CXX="g++ -march=x86-64"
+          else
+            echo "No experiments/Makefile yet; baseline build only."
+          fi
+
+      - name: Run combinational RTL golden-vector simulation
+        run: |
+          python3 rtl/generate_rtl_vectors.py --output rtl/generated_vectors.txt
+          iverilog -g2012 -s tb_osd_paged_candidate_engine \
+            -o rtl/tb_osd_paged_candidate_engine.out \
+            rtl/osd_prefix_delta_page.sv \
+            rtl/osd_page_score.sv \
+            rtl/osd_paged_candidate_engine.sv \
+            rtl/tb_osd_paged_candidate_engine.sv
+          vvp rtl/tb_osd_paged_candidate_engine.out \
+            +VECTORS=rtl/generated_vectors.txt
+
+      - name: Run sequential RTL golden-vector simulation
+        run: |
+          iverilog -g2012 -s tb_osd_paged_candidate_engine_seq \
+            -o rtl/tb_osd_paged_candidate_engine_seq.out \
+            rtl/osd_paged_candidate_engine_seq.sv \
+            rtl/tb_osd_paged_candidate_engine_seq.sv
+          vvp rtl/tb_osd_paged_candidate_engine_seq.out \
+            +VECTORS=rtl/generated_vectors.txt
+
+      - name: Synthesize sequential P1 P8 P16 candidate engines
+        run: |
+          for page in 1 8 16; do
+            echo "RTL_SYNTH_BEGIN P=${page}"
+            yosys -p "read_verilog -sv \
+              rtl/osd_paged_candidate_engine_seq.sv; \
+              chparam -set P ${page} osd_paged_candidate_engine_seq; \
+              hierarchy -check -top osd_paged_candidate_engine_seq; \
+              synth -top osd_paged_candidate_engine_seq; \
+              stat"
+            echo "RTL_SYNTH_END P=${page}"
+          done

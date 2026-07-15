@@ -1,0 +1,12 @@
+stage,median_ns,p95_ns,median_share
+total,11273005,15828626,1.0
+reliability_prepare,151,250,0.000013
+sort,3455,6109,0.000306
+matrix_permute,4206,5909,0.000373
+row_echelon,52428,69863,0.004651
+systematic,35302,57104,0.003132
+soft_permute,111,200,0.000010
+initial_encode,1332,2133,0.000118
+candidate_search,11161850,15725933,0.990140
+output_permute,271,360,0.000024
+unaccounted_overhead,490,780,

@@ -1,0 +1,3 @@
+mode,frames_per_repeat,repeats,median_total_ns,p95_total_ns,median_candidate_ns,blocks_per_second,speedup_vs_baseline,candidates,page_width,pages,cache_bytes,page_payload_bytes,cache_build_ns,result
+baseline,9,9,10103863,11034931,10013571,98.972047,1.000000,679121,0,0,0,0,0,pass
+combined,9,9,108315088,122775756,108225771,9.232324,0.093282,679121,8,84891,5432968,1198,591464,pass
