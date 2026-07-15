@@ -5,9 +5,9 @@
 - Branch: `research/osd-paged-vector`
 - Draft PR: #1
 - Baseline commit: `e6cfc5b0f71d8e82d6cba2184b1edf0486f64238`
-- Current phase: Phase 7 complete — combined experimental path measured and rejected
+- Current phase: Phase 8 complete — native parity and pthread DFS measured
 - Upstream production integration: not started; opt-in experiment only
-- Latest focused CI before the combined-path addition: GitHub Actions run #86, passed
+- Latest focused CI: GitHub Actions run #101, passed; Phase 8 local suite passed
 
 ## Claim boundary
 
@@ -36,6 +36,7 @@ new decoding-algorithm claim is made.
 | 5 | Evidence freeze and padding regression | Pass |
 | 6 | RTL golden vectors and generic synthesis | Pass |
 | 7 | Combined cached P8 parity-only software decoder | Correct but 10.72x slower; reject |
+| 8 | Native parity plus pthread DFS subtrees | Exact; 8 workers give 5.26x host-native speedup |
 
 ## Production traversal
 
@@ -160,6 +161,48 @@ as a systems finding. For software, test parity-only state while retaining the
 native traversal. Treat page vectorisation as a hardware architecture whose
 benefit requires mapped parallel timing.
 
+## Native parity and pthread DFS experiment
+
+The Phase 8 software experiment retained production preprocessing and output,
+removed the TEP cache and materialized pages, and compared the native candidate
+loop with stateful parity scoring and pthread DFS subtrees. RTL was not changed.
+
+Every tested mode matched decoded bytes, uniqueness, best and runner-up metrics,
+and the complete winning permuted candidate across nine fixed BCH(127,64),
+order-4 frames. Original production traversal indices preserve the earliest
+winner when metrics tie. Thread creation and joining are included per block.
+
+Portable `-O3 -march=x86-64` results:
+
+| Mode | Median ms/block | P95 ms/block | Blocks/s | Speedup |
+|---|---:|---:|---:|---:|
+| Production baseline | 8.365 | 8.490 | 119.5 | 1.00x |
+| Stateful parity, one thread | 7.211 | 7.363 | 138.7 | 1.16x |
+| pthread, 2 workers | 2.920 | 3.001 | 342.5 | 2.87x |
+| pthread, 4 workers | 1.584 | 1.633 | 631.4 | 5.28x |
+| pthread, 8 workers | 0.973 | 1.062 | 1,027.9 | **8.60x** |
+| pthread, 16 workers | 1.033 | 1.203 | 967.8 | 8.10x |
+
+Host-native `-O3 -march=native` results:
+
+| Mode | Median ms/block | P95 ms/block | Blocks/s | Speedup |
+|---|---:|---:|---:|---:|
+| Production baseline | 3.932 | 3.969 | 254.3 | 1.00x |
+| Stateful parity, one thread | 5.336 | 5.428 | 187.4 | 0.74x |
+| pthread, 2 workers | 1.969 | 2.121 | 507.8 | 2.00x |
+| pthread, 4 workers | 1.119 | 1.162 | 893.4 | 3.51x |
+| pthread, 8 workers | 0.748 | 0.816 | 1,336.6 | **5.26x** |
+| pthread, 16 workers | 0.844 | 0.993 | 1,185.0 | 4.66x |
+
+Eight workers are optimal on the nine-CPU allocation. Stateful parity alone is
+not robust across compiler targets, but pthread subtree parallelism remains
+positive in both builds. Address/Undefined sanitizers passed with leak detection
+disabled because of ptrace, and ThreadSanitizer reported no race.
+
+This is an opt-in experiment, not production integration. It has not yet tested
+persistent workers, affinity, real channel traces, other code/order settings,
+concurrent decoder instances, energy, or loaded-system tail latency.
+
 ## RTL evidence
 
 Two parameterized implementations are present:
@@ -216,12 +259,13 @@ Machine-readable outputs are in `experiments/results/`.
 
 ## Next gated phase
 
-1. Do not merge the combined cached/materialized-page software search.
-2. Integrate only stateful parity-only scoring while preserving the native DFS
-   flip traversal; repeat end-to-end exactness and timing.
-3. Add deterministic best/runner-up hardware reduction and backpressure tests.
-4. Map P=1,8,16 to a named FPGA and report LUTs, registers, RAMs, Fmax, latency,
-   and throughput.
-5. Run post-route power or board measurements before any energy claim.
-6. Run the long stochastic upstream regression separately before proposing a
-   non-draft production PR.
+1. Keep the cached/materialized-page software path rejected.
+2. Replace per-block thread creation with a persistent worker pool and measure
+   whether latency and p95 improve.
+3. Add CPU-affinity and loaded-system tests, then sweep additional code lengths
+   and OSD orders with realistic channel traces.
+4. Test multiple concurrent decoder instances to distinguish single-block
+   latency from aggregate throughput.
+5. Consider production integration only if exactness and speed survive those
+   gates; keep the search hook opt-in until then.
+6. Leave RTL unchanged during this software phase.

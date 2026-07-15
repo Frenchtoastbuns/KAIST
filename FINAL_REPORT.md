@@ -1,15 +1,20 @@
-# Bit-exact paged OSD candidate engine: Phase 0-6 report
+# Bit-exact paged OSD candidate engine: Phase 0-8 report
 
 ## Decision
 
-Reject the naïve combined software architecture that couples a persistent TEP
-cache, materialized P=8 prefix-delta pages and parity-only scoring. It is
-bit-exact but measured 10.72x slower than the production decoder.
+Keep the naïve cached/materialized P8 software architecture rejected. It is
+bit-exact but 10.72x slower than the production decoder.
 
-For the next software gate, retain the native DFS flip traversal and integrate
-only stateful parity-only scoring. Continue the P=8/P=16 RTL work separately:
-hardware page parallelism must be established by mapped timing, not inferred
-from sequential software. Do not replace the production candidate loop yet.
+Stateful parity-only traversal is not a robust standalone optimization: it is
+1.16x faster under portable x86-64 O3 but 0.74x as fast under the host-native
+build. Dynamic pthread DFS-subtree scheduling is the viable software result. At
+eight workers it is bit-exact and measured 8.60x faster in the portable build
+and 5.26x faster in the host-native build, including thread creation and join.
+
+Do not replace the production loop yet. The result is from one nine-CPU host,
+one code/order, and deterministic synthetic inputs. The next gate is a
+persistent pool plus affinity, additional workloads, and loaded-system tail
+latency. RTL remains unchanged in Phase 8.
 
 ## Research question
 
@@ -196,6 +201,30 @@ deltas and materializing page candidates duplicates transition work and adds
 short-loop/page overhead. This is a useful systems result, not a failed
 correctness test.
 
+### 8. Native DFS subtree parallelism produced a positive result
+
+The Phase 8 experiment removed the rejected TEP cache and materialized pages.
+It retained production preprocessing/output and split the exact DFS traversal
+into dynamically scheduled depth-two subtrees. Each candidate kept its original
+production sequence index for deterministic tie resolution.
+
+Nine fixed BCH(127,64), order-4 frames matched decoded bytes, uniqueness, best,
+runner-up and the complete winning candidate. With GCC 13.3 and
+`-O3 -march=native -pthread`, median full-decoder latency changed from
+3.932 ms at baseline to 0.748 ms with eight workers, a 5.26x speedup. A portable
+`-march=x86-64` build changed from 8.365 ms to 0.973 ms, an 8.60x speedup.
+Sixteen workers were slower than eight on the nine-CPU allocation.
+
+Stateful parity alone was compiler-sensitive and is not retained as an
+independent speed claim. The pthread result remained positive under both
+compiler targets. Thread creation/join was included in every decoded block.
+Address/Undefined sanitizers and ThreadSanitizer passed within the documented
+container limitations.
+
+Full methodology, limitations, and machine-readable results are in
+`experiments/NATIVE_PARITY_PTHREAD_FINDINGS.md` and
+`experiments/results/native_parity_pthread_*_summary.csv`.
+
 ## Reproduction
 
 Software:
@@ -225,15 +254,11 @@ Machine-readable results are under `experiments/results/`.
 
 ## Next gated experiment
 
-The next software implementation should preserve the native recursive flip
-traversal and integrate only stateful parity-only scoring. It must repeat
-candidate, score, tie, decoded-output and end-to-end timing gates. The cached
-materialized-page path should remain an explicitly rejected comparison.
-
-The hardware track should add deterministic best/runner-up reduction,
-ready/valid backpressure, reset/restart checks and randomized page boundaries.
-Only then should P=1,8,16 be mapped to a named FPGA and compared using LUTs,
-registers, RAMs, Fmax, latency and throughput.
+Replace per-block pthread creation with a persistent pool, then test affinity,
+loaded-system p95, realistic channel traces, multiple code lengths/orders, and
+multiple concurrent decoder instances. Production integration is gated on
+exactness and speed surviving those checks. Keep RTL unchanged during this
+software phase.
 
 ## Limitations
 

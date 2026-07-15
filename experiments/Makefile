@@ -1,7 +1,7 @@
 CXX ?= g++
 CXXFLAGS ?= -I.. -std=c++17 -O2 -W -Wall -Wextra -pedantic
 
-tests := osd_smoke_test tep_trace_test osd_operation_count_test osd_profile_test parity_delta_test candidate_stage_benchmark paged_candidate_test padding_state_test combined_decoder_benchmark
+tests := osd_smoke_test tep_trace_test osd_operation_count_test osd_profile_test parity_delta_test candidate_stage_benchmark paged_candidate_test padding_state_test combined_decoder_benchmark native_parity_decoder_benchmark
 
 .PHONY: all test benchmark-tep clean
 
@@ -18,6 +18,10 @@ test: $(tests)
 	./paged_candidate_test
 	./padding_state_test
 	./combined_decoder_benchmark
+	./native_parity_decoder_benchmark
+
+native_parity_decoder_benchmark: native_parity_decoder_benchmark.cc
+	$(CXX) $(CXXFLAGS) -pthread $< -o $@
 
 benchmark-tep:
 	python3 tep_delivery_modes.py --k 64 --order 4 --page-size 4096 --blocks 200 --warmup-blocks 2 --repeats 5 --output-dir results
