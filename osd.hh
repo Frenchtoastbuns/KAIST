@@ -30,6 +30,16 @@ Copyright 2020 Ahmet Inan <inan@aicodix.de>
 #define CODE_OSD_INTERNAL_UNDEF_TRACE_READY
 #endif
 
+#ifndef CODE_OSD_SEARCH_OVERRIDE
+#define CODE_OSD_SEARCH_OVERRIDE(matrix, base, candidate, soft, permutation, length, dimension, width, order, best, next) false
+#define CODE_OSD_INTERNAL_UNDEF_SEARCH_OVERRIDE
+#endif
+
+#ifndef CODE_OSD_SEARCH_COMPLETE
+#define CODE_OSD_SEARCH_COMPLETE(best, next, candidate, permutation, length, width) ((void)0)
+#define CODE_OSD_INTERNAL_UNDEF_SEARCH_COMPLETE
+#endif
+
 #ifndef CODE_OSD_PROFILE_BEGIN
 #define CODE_OSD_PROFILE_BEGIN(stage) ((void)0)
 #define CODE_OSD_INTERNAL_UNDEF_PROFILE_BEGIN
@@ -258,57 +268,73 @@ public:
 		CODE_OSD_PROFILE_BEGIN(7);
 		CODE_OSD_TRACE_READY(G, codeword, softperm, perm, N, K, W);
 		CODE_OSD_TRACE_RESET();
-		for (int i = 0; i < N; ++i)
-			candidate[i] = codeword[i];
-		int best = metric(codeword, softperm);
-		CODE_OSD_TRACE_CANDIDATE(codeword, softperm, N, W, best);
+		int best = 0;
 		int next = -1;
-		auto update = [this, &best, &next]() {
-			int met = metric(codeword, softperm);
-			CODE_OSD_TRACE_CANDIDATE(codeword, softperm, N, W, met);
-			if (met > best) {
-				CODE_OSD_PROFILE_UPDATE(2);
-				next = best;
-				best = met;
-				for (int i = 0; i < N; ++i)
-					candidate[i] = codeword[i];
-			} else if (met > next) {
-				CODE_OSD_PROFILE_UPDATE(1);
-				next = met;
-			} else {
-				CODE_OSD_PROFILE_UPDATE(0);
-			}
-		};
-		for (int a = 0; O >= 1 && a < K; ++a) {
-			flip(a);
-			update();
-			for (int b = a + 1; O >= 2 && b < K; ++b) {
-				flip(b);
-				update();
-				for (int c = b + 1; O >= 3 && c < K; ++c) {
-					flip(c);
-					update();
-					for (int d = c + 1; O >= 4 && d < K; ++d) {
-						flip(d);
-						update();
-						for (int e = d + 1; O >= 5 && e < K; ++e) {
-							flip(e);
-							update();
-							for (int f = e + 1; O >= 6 && f < K; ++f) {
-								flip(f);
-								update();
-								flip(f);
-							}
-							flip(e);
-						}
-						flip(d);
-					}
-					flip(c);
+		if (!CODE_OSD_SEARCH_OVERRIDE(
+			G,
+			codeword,
+			candidate,
+			softperm,
+			perm,
+			N,
+			K,
+			W,
+			O,
+			best,
+			next
+		)) {
+			for (int i = 0; i < N; ++i)
+				candidate[i] = codeword[i];
+			best = metric(codeword, softperm);
+			CODE_OSD_TRACE_CANDIDATE(codeword, softperm, N, W, best);
+			auto update = [this, &best, &next]() {
+				int met = metric(codeword, softperm);
+				CODE_OSD_TRACE_CANDIDATE(codeword, softperm, N, W, met);
+				if (met > best) {
+					CODE_OSD_PROFILE_UPDATE(2);
+					next = best;
+					best = met;
+					for (int i = 0; i < N; ++i)
+						candidate[i] = codeword[i];
+				} else if (met > next) {
+					CODE_OSD_PROFILE_UPDATE(1);
+					next = met;
+				} else {
+					CODE_OSD_PROFILE_UPDATE(0);
 				}
-				flip(b);
+			};
+			for (int a = 0; O >= 1 && a < K; ++a) {
+				flip(a);
+				update();
+				for (int b = a + 1; O >= 2 && b < K; ++b) {
+					flip(b);
+					update();
+					for (int c = b + 1; O >= 3 && c < K; ++c) {
+						flip(c);
+						update();
+						for (int d = c + 1; O >= 4 && d < K; ++d) {
+							flip(d);
+							update();
+							for (int e = d + 1; O >= 5 && e < K; ++e) {
+								flip(e);
+								update();
+								for (int f = e + 1; O >= 6 && f < K; ++f) {
+									flip(f);
+									update();
+									flip(f);
+								}
+								flip(e);
+							}
+							flip(d);
+						}
+						flip(c);
+					}
+					flip(b);
+				}
+				flip(a);
 			}
-			flip(a);
 		}
+		CODE_OSD_SEARCH_COMPLETE(best, next, candidate, perm, N, W);
 		CODE_OSD_PROFILE_END(7);
 		CODE_OSD_PROFILE_BEGIN(8);
 		for (int i = 0; i < N; ++i)
@@ -499,6 +525,16 @@ public:
 #ifdef CODE_OSD_INTERNAL_UNDEF_TRACE_READY
 #undef CODE_OSD_TRACE_READY
 #undef CODE_OSD_INTERNAL_UNDEF_TRACE_READY
+#endif
+
+#ifdef CODE_OSD_INTERNAL_UNDEF_SEARCH_OVERRIDE
+#undef CODE_OSD_SEARCH_OVERRIDE
+#undef CODE_OSD_INTERNAL_UNDEF_SEARCH_OVERRIDE
+#endif
+
+#ifdef CODE_OSD_INTERNAL_UNDEF_SEARCH_COMPLETE
+#undef CODE_OSD_SEARCH_COMPLETE
+#undef CODE_OSD_INTERNAL_UNDEF_SEARCH_COMPLETE
 #endif
 
 #ifdef CODE_OSD_INTERNAL_UNDEF_PROFILE_BEGIN
