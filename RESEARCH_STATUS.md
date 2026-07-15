@@ -5,9 +5,9 @@
 - Branch: `research/osd-paged-vector`
 - Draft PR: #1
 - Baseline commit: `e6cfc5b0f71d8e82d6cba2184b1edf0486f64238`
-- Current phase: Phase 6 complete — software, TEP-delivery, and RTL evidence frozen
-- Upstream production integration: not started
-- Latest focused CI before the TEP benchmark addition: GitHub Actions run #70, passed
+- Current phase: Phase 7 complete — combined experimental path measured and rejected
+- Upstream production integration: not started; opt-in experiment only
+- Latest focused CI before the combined-path addition: GitHub Actions run #86, passed
 
 ## Claim boundary
 
@@ -35,6 +35,7 @@ new decoding-algorithm claim is made.
 | 4 | Paged and prefix-delta software models | Pass |
 | 5 | Evidence freeze and padding regression | Pass |
 | 6 | RTL golden vectors and generic synthesis | Pass |
+| 7 | Combined cached P8 parity-only software decoder | Correct but 10.72x slower; reject |
 
 ## Production traversal
 
@@ -126,6 +127,39 @@ decoded output, page counts, and the one-candidate final partial page.
 
 Payload figures exclude allocator and container metadata.
 
+## Combined end-to-end experiment
+
+An opt-in search override kept the real production preprocessing and output
+path while replacing only candidate search with all proposed software features:
+a persistent production-order cache, P=8 pages, adjacent-mask prefix deltas,
+parity-only state/scoring, and exact best/runner-up reduction.
+
+Correctness across nine fixed BCH(127,64), order-4 frames:
+
+- all 679,121 candidates and 84,891 pages processed;
+- final partial page contained one lane;
+- decoded bytes and uniqueness matched production;
+- best score, runner-up score and winning permuted candidate matched;
+- cache sequence hash remained `9717451b3bb8a575`.
+
+End-to-end timing used two warm-up rounds, nine frames per repeat, nine repeats
+and alternating execution order:
+
+| Mode | Median ms/block | P95 ms/block | Candidate ms | Blocks/s |
+|---|---:|---:|---:|---:|
+| Production baseline | 10.104 | 11.035 | 10.014 | 98.972 |
+| Combined cached P8 parity | 108.315 | 122.776 | 108.226 | 9.232 |
+
+The combined path is 10.72x slower, not faster. The component improvements are
+not multiplicative. Cached candidate masks plus materialized prefix pages
+duplicate state transition work that the compiler-friendly in-place DFS loop
+already performs efficiently.
+
+Decision: reject this naïve combined software architecture. Preserve the result
+as a systems finding. For software, test parity-only state while retaining the
+native traversal. Treat page vectorisation as a hardware architecture whose
+benefit requires mapped parallel timing.
+
 ## RTL evidence
 
 Two parameterized implementations are present:
@@ -182,10 +216,9 @@ Machine-readable outputs are in `experiments/results/`.
 
 ## Next gated phase
 
-1. Integrate only the P8 sequential candidate engine behind an opt-in boundary;
-   keep the upstream decoder path as the oracle.
-2. Compare every integrated candidate, score, best/runner-up update, tie, and
-   decoded word on fixed and randomized frames.
+1. Do not merge the combined cached/materialized-page software search.
+2. Integrate only stateful parity-only scoring while preserving the native DFS
+   flip traversal; repeat end-to-end exactness and timing.
 3. Add deterministic best/runner-up hardware reduction and backpressure tests.
 4. Map P=1,8,16 to a named FPGA and report LUTs, registers, RAMs, Fmax, latency,
    and throughput.
