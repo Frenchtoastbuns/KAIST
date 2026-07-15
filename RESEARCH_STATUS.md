@@ -5,7 +5,7 @@
 - Branch: `research/osd-paged-vector`
 - Draft PR: #1
 - Baseline commit: `e6cfc5b0f71d8e82d6cba2184b1edf0486f64238`
-- Current phase: Phase 8 complete — native parity and pthread DFS measured
+- Current phase: Phase 9 complete — full-state versus parity pthread DFS A/B measured
 - Upstream production integration: not started; opt-in experiment only
 - Latest focused CI: GitHub Actions run #101, passed; Phase 8 local suite passed
 
@@ -36,7 +36,8 @@ new decoding-algorithm claim is made.
 | 5 | Evidence freeze and padding regression | Pass |
 | 6 | RTL golden vectors and generic synthesis | Pass |
 | 7 | Combined cached P8 parity-only software decoder | Correct but 10.72x slower; reject |
-| 8 | Native parity plus pthread DFS subtrees | Exact; 8 workers give 5.26x host-native speedup |
+| 8 | Native parity plus pthread DFS subtrees | Exact; pthread direction passes |
+| 9 | Full-state versus parity pthread DFS A/B | Exact; pthread robust, parity target-dependent |
 
 ## Production traversal
 
@@ -203,6 +204,39 @@ This is an opt-in experiment, not production integration. It has not yet tested
 persistent workers, affinity, real channel traces, other code/order settings,
 concurrent decoder instances, energy, or loaded-system tail latency.
 
+## Full-state versus parity pthread DFS A/B
+
+Phase 9 ran the missing attribution control: identical depth-two subtree
+partitioning, dynamic work queue, thread counts, candidate ordering and
+best/runner-up merge, with either full 128-byte candidate state or parity-only
+delta state. RTL remained unchanged.
+
+All modes again matched production decoded bytes, uniqueness, best, runner-up,
+and the complete earliest winning candidate on nine fixed BCH(127,64), order-4
+frames.
+
+First controlled runs at eight workers:
+
+| Build | Full-state pthread | Parity pthread | Full speedup | Parity speedup |
+|---|---:|---:|---:|---:|
+| `-O3 -march=x86-64` | 1.528 ms | 1.081 ms | 5.52x | 7.80x |
+| `-O3 -march=native` | 0.864 ms | 0.873 ms | 4.59x | 4.54x |
+
+The full eight-worker benchmark was executed three times per compiler target.
+The median full/parity latency ratio was 1.398 for portable x86-64, so
+parity-only state was about 40% faster there. The host-native median ratio was
+0.998, with individual ratios from 0.990 to 1.054; the kernels are effectively
+tied there.
+
+Conclusion: DFS subtree parallelism is the robust optimization. Parity-only
+state is a target-dependent optional kernel and must not receive sole credit for
+the threaded speedup. Keep the full-state implementation as the control and
+select parity only after target-specific benchmarking.
+
+The new full-state path passed Address/Undefined sanitizers, ThreadSanitizer,
+and the complete bounded repository suite. Thread creation/join remains included
+per decoded block.
+
 ## RTL evidence
 
 Two parameterized implementations are present:
@@ -260,12 +294,11 @@ Machine-readable outputs are in `experiments/results/`.
 ## Next gated phase
 
 1. Keep the cached/materialized-page software path rejected.
-2. Replace per-block thread creation with a persistent worker pool and measure
-   whether latency and p95 improve.
-3. Add CPU-affinity and loaded-system tests, then sweep additional code lengths
-   and OSD orders with realistic channel traces.
-4. Test multiple concurrent decoder instances to distinguish single-block
-   latency from aggregate throughput.
-5. Consider production integration only if exactness and speed survive those
-   gates; keep the search hook opt-in until then.
+2. Build a persistent pthread pool supporting both full-state and parity-only
+   worker kernels.
+3. Measure affinity, loaded-system p95, realistic channel traces, additional
+   code lengths/orders, and multiple concurrent decoder instances.
+4. Treat full-state pthread DFS as the portable correctness/performance control.
+5. Enable parity-only state only where target-specific measurement shows a
+   repeatable benefit.
 6. Leave RTL unchanged during this software phase.

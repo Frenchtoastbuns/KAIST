@@ -60,6 +60,7 @@ constexpr int K = 64;
 constexpr int O = 4;
 constexpr int R = N - K;
 constexpr int PW = 64;
+constexpr int FW = 128;
 constexpr uint64_t EXPECTED_CANDIDATES = 679121;
 constexpr uint64_t EXPECTED_FLIPS = 1358240;
 constexpr uint64_t FNV_PRIME = 1099511628211ULL;
@@ -316,7 +317,7 @@ struct SearchAccumulator {
 		int metric,
 		uint64_t candidate_index,
 		uint64_t mask,
-		const std::array<int8_t, PW> &parity
+		const int8_t *parity
 	)
 	{
 		++candidates;
@@ -326,13 +327,13 @@ struct SearchAccumulator {
 			best_count = 1;
 			best_index = candidate_index;
 			best_mask = mask;
-			best_parity = parity;
+			std::copy(parity, parity + PW, best_parity.begin());
 		} else if (metric == best) {
 			++best_count;
 			if (candidate_index < best_index) {
 				best_index = candidate_index;
 				best_mask = mask;
-				best_parity = parity;
+				std::copy(parity, parity + PW, best_parity.begin());
 			}
 		} else if (metric > second) {
 			second = metric;
@@ -364,18 +365,19 @@ struct SearchAccumulator {
 	}
 };
 
-class PthreadParitySearch {
+class PthreadSearch {
 	const int8_t *matrix;
 	const int8_t *base;
 	int8_t *candidate;
 	const int8_t *soft;
 	const int width;
 	const int thread_count;
+	const bool parity_only;
 	const std::vector<SubtreeTask> &tasks;
 	std::atomic<std::size_t> next_task{0};
 
 	struct alignas(64) Worker {
-		PthreadParitySearch *search = nullptr;
+		PthreadSearch *search = nullptr;
 		SearchAccumulator result;
 	};
 
@@ -428,7 +430,7 @@ class PthreadParitySearch {
 			metric +=
 				(1 - 2 * parity[static_cast<std::size_t>(offset)]) *
 				soft[K + offset];
-		result.consider(metric, candidate_index, mask, parity);
+		result.consider(metric, candidate_index, mask, parity.data());
 	}
 
 	void run_task(const SubtreeTask &task, SearchAccumulator &result) const
@@ -462,6 +464,68 @@ class PthreadParitySearch {
 		assert(candidate_index == task.first_index + task.candidate_count);
 	}
 
+	void full_flip(
+		int index,
+		uint64_t &mask,
+		std::array<int8_t, FW> &word,
+		SearchAccumulator &result
+	) const
+	{
+		mask ^= uint64_t{1} << index;
+		for (int offset = 0; offset < FW; ++offset)
+			word[static_cast<std::size_t>(offset)] ^=
+				matrix[index * width + offset];
+		++result.state_row_applications;
+	}
+
+	void full_evaluate(
+		uint64_t candidate_index,
+		uint64_t mask,
+		const std::array<int8_t, FW> &word,
+		SearchAccumulator &result
+	) const
+	{
+		int metric = 0;
+		for (int offset = 0; offset < FW; ++offset)
+			metric +=
+				(1 - 2 * word[static_cast<std::size_t>(offset)]) *
+				soft[offset];
+		result.consider(metric, candidate_index, mask, word.data() + K);
+	}
+
+	void run_full_task(
+		const SubtreeTask &task,
+		SearchAccumulator &result
+	) const
+	{
+		std::array<int8_t, FW> word{};
+		std::copy(base, base + FW, word.begin());
+		uint64_t mask = 0;
+		full_flip(task.a, mask, word, result);
+		if (task.pair)
+			full_flip(task.b, mask, word, result);
+
+		uint64_t candidate_index = task.first_index;
+		full_evaluate(candidate_index++, mask, word, result);
+		if (!task.pair) {
+			assert(candidate_index == task.first_index + task.candidate_count);
+			return;
+		}
+
+		for (int c = task.b + 1; c < K; ++c) {
+			full_flip(c, mask, word, result);
+			full_evaluate(candidate_index++, mask, word, result);
+			for (int d = c + 1; d < K; ++d) {
+				full_flip(d, mask, word, result);
+				full_evaluate(candidate_index++, mask, word, result);
+				full_flip(d, mask, word, result);
+			}
+			full_flip(c, mask, word, result);
+		}
+		assert(mask == task.mask);
+		assert(candidate_index == task.first_index + task.candidate_count);
+	}
+
 	void run_worker(SearchAccumulator &result)
 	{
 		for (;;) {
@@ -471,7 +535,10 @@ class PthreadParitySearch {
 			);
 			if (index >= tasks.size())
 				break;
-			run_task(tasks[index], result);
+			if (parity_only)
+				run_task(tasks[index], result);
+			else
+				run_full_task(tasks[index], result);
 		}
 	}
 
@@ -490,13 +557,14 @@ class PthreadParitySearch {
 	}
 
 public:
-	PthreadParitySearch(
+	PthreadSearch(
 		const int8_t *input_matrix,
 		const int8_t *input_base,
 		int8_t *output_candidate,
 		const int8_t *input_soft,
 		int input_width,
-		int input_thread_count
+		int input_thread_count,
+		bool input_parity_only
 	):
 		matrix(input_matrix),
 		base(input_base),
@@ -504,10 +572,12 @@ public:
 		soft(input_soft),
 		width(input_width),
 		thread_count(input_thread_count),
+		parity_only(input_parity_only),
 		tasks(subtree_tasks()),
 		workers(static_cast<std::size_t>(input_thread_count))
 	{
 		assert(thread_count >= 2);
+		assert(width == FW);
 		for (auto &worker: workers)
 			worker.search = this;
 	}
@@ -540,7 +610,7 @@ public:
 			base_metric +=
 				(1 - 2 * base_parity[static_cast<std::size_t>(offset)]) *
 				soft[K + offset];
-		combined.consider(base_metric, 0, 0, base_parity);
+		combined.consider(base_metric, 0, 0, base_parity.data());
 		for (const auto &worker: workers)
 			combined.merge(worker.result);
 
@@ -548,9 +618,11 @@ public:
 		copy_candidate(combined);
 		search_stats.candidates = combined.candidates;
 		search_stats.flips = combined.state_row_applications;
-		search_stats.parity_metric_terms = combined.candidates * PW;
+		const uint64_t terms_per_state = parity_only ? PW : FW;
+		search_stats.parity_metric_terms =
+			combined.candidates * terms_per_state;
 		search_stats.parity_flip_terms =
-			combined.state_row_applications * PW;
+			combined.state_row_applications * terms_per_state;
 		search_stats.best_mask = combined.best_mask;
 		search_stats.best = combined.best;
 		search_stats.next = combined.best_count > 1
@@ -588,13 +660,14 @@ bool search_override(
 		best = search.best_metric();
 		next = search.next_metric();
 	} else {
-		PthreadParitySearch search(
+		PthreadSearch search(
 			matrix,
 			base,
 			candidate,
 			soft,
 			width,
-			search_mode
+			std::abs(search_mode),
+			search_mode > 0
 		);
 		search.run();
 		best = search.best_metric();
@@ -682,14 +755,20 @@ int main(int argc, char **argv)
 	constexpr int FRAME_COUNT = OSD_BENCH_FRAME_COUNT;
 	constexpr int WARMUP_ROUNDS = OSD_BENCH_WARMUP_ROUNDS;
 	constexpr int REPEATS = OSD_BENCH_REPEATS;
-	const std::array<int, 6> mode_values{0, 1, 2, 4, 8, 16};
-	const std::array<std::string, 6> mode_names{
+	const std::array<int, 10> mode_values{
+		0, 1, -2, -4, -8, -16, 2, 4, 8, 16
+	};
+	const std::array<std::string, 10> mode_names{
 		"baseline",
 		"native_parity",
-		"pthread_2",
-		"pthread_4",
-		"pthread_8",
-		"pthread_16"
+		"pthread_full_2",
+		"pthread_full_4",
+		"pthread_full_8",
+		"pthread_full_16",
+		"pthread_parity_2",
+		"pthread_parity_4",
+		"pthread_parity_8",
+		"pthread_parity_16"
 	};
 
 	int8_t genmat[N * K];
@@ -756,8 +835,8 @@ int main(int argc, char **argv)
 				output_checksum ^= result.decoded[0];
 			}
 
-	std::array<std::vector<uint64_t>, 6> total_samples;
-	std::array<std::vector<uint64_t>, 6> candidate_samples;
+	std::array<std::vector<uint64_t>, 10> total_samples;
+	std::array<std::vector<uint64_t>, 10> candidate_samples;
 	std::ofstream raw;
 	if (argc > 2) {
 		raw.open(argv[2]);
@@ -766,7 +845,7 @@ int main(int argc, char **argv)
 	}
 
 	for (int repeat = 0; repeat < REPEATS; ++repeat) {
-		std::array<std::size_t, 6> order{0, 1, 2, 3, 4, 5};
+		std::array<std::size_t, 10> order{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
 		if (repeat & 1)
 			std::reverse(order.begin(), order.end());
 		for (const std::size_t mode_index: order) {
@@ -795,21 +874,23 @@ int main(int argc, char **argv)
 			if (raw)
 				raw << repeat + 1 << ','
 					<< mode_names[mode_index] << ','
-					<< (mode >= 2 ? mode : 1) << ','
+					<< (std::abs(mode) >= 2 ? std::abs(mode) : 1) << ','
 					<< FRAME_COUNT << ',' << total_ns << ','
 					<< total_per_block << ',' << candidate_per_block << ','
 					<< std::hex << checksum << std::dec << '\n';
 		}
 	}
 
-	std::array<ModeSummary, 6> summaries;
+	std::array<ModeSummary, 10> summaries;
 	for (std::size_t mode_index = 0;
 		mode_index < summaries.size();
 		++mode_index) {
 		auto &summary = summaries[mode_index];
 		summary.name = mode_names[mode_index];
 		summary.mode = mode_values[mode_index];
-		summary.threads = summary.mode >= 2 ? summary.mode : 1;
+		summary.threads = std::abs(summary.mode) >= 2
+			? std::abs(summary.mode)
+			: 1;
 		summary.median_total_ns = median(total_samples[mode_index]);
 		summary.p95_total_ns = percentile(total_samples[mode_index], 0.95);
 		summary.median_candidate_ns = median(candidate_samples[mode_index]);
@@ -820,14 +901,17 @@ int main(int argc, char **argv)
 		std::ofstream summary(argv[1]);
 		summary << "mode,threads,frames_per_repeat,repeats,median_total_ns,"
 			"p95_total_ns,median_candidate_ns,blocks_per_second,"
-			"speedup_vs_baseline,candidates,flips,parity_metric_terms,"
-			"parity_flip_terms,result\n";
+			"speedup_vs_baseline,candidates,state_row_applications,"
+			"metric_terms,state_update_terms,result\n";
 		for (const auto &value: summaries) {
 			const double speedup =
 				summaries[0].median_total_ns / value.median_total_ns;
 			const uint64_t flips = value.mode == 0
 				? 0
 				: (value.mode == 1 ? EXPECTED_FLIPS : 1358176);
+			const uint64_t terms_per_state = value.mode == 0
+				? 0
+				: (value.mode < 0 ? FW : PW);
 			summary << value.name << ',' << value.threads << ','
 				<< FRAME_COUNT << ',' << REPEATS
 				<< ',' << static_cast<uint64_t>(value.median_total_ns)
@@ -838,20 +922,20 @@ int main(int argc, char **argv)
 				<< speedup << ','
 				<< EXPECTED_CANDIDATES << ','
 				<< flips << ','
-				<< (value.mode ? EXPECTED_CANDIDATES * PW : 0) << ','
-				<< (value.mode ? flips * PW : 0)
+				<< EXPECTED_CANDIDATES * terms_per_state << ','
+				<< flips * terms_per_state
 				<< ",pass\n";
 		}
 	}
 
-	std::cout << "NATIVE_PARITY_PASS "
+	std::cout << "PTHREAD_DFS_PASS "
 		<< "frames=" << FRAME_COUNT << ' '
 		<< "candidates=" << search_stats.candidates << ' '
 		<< "flips=" << search_stats.flips << ' '
-		<< "parity_metric_terms=" << search_stats.parity_metric_terms << ' '
-		<< "parity_flip_terms=" << search_stats.parity_flip_terms << '\n';
+		<< "metric_terms=" << search_stats.parity_metric_terms << ' '
+		<< "state_update_terms=" << search_stats.parity_flip_terms << '\n';
 	for (const auto &summary: summaries)
-		std::cout << "NATIVE_PARITY_BENCH " << summary.name << ' '
+		std::cout << "PTHREAD_DFS_BENCH " << summary.name << ' '
 			<< "threads=" << summary.threads << ' '
 			<< "median_total_ns="
 			<< static_cast<uint64_t>(summary.median_total_ns) << ' '
@@ -862,13 +946,13 @@ int main(int argc, char **argv)
 			<< "blocks_per_second=" << std::fixed
 			<< std::setprecision(3) << summary.blocks_per_second << '\n';
 	for (const auto &summary: summaries)
-		std::cout << "NATIVE_PARITY_SPEEDUP " << summary.name << ' '
+		std::cout << "PTHREAD_DFS_SPEEDUP " << summary.name << ' '
 			<< "overall=" << std::fixed << std::setprecision(5)
 			<< summaries[0].median_total_ns / summary.median_total_ns << ' '
 			<< "candidate="
 			<< summaries[0].median_candidate_ns /
 				summary.median_candidate_ns << '\n';
-	std::cout << "NATIVE_PARITY_CHECKSUM "
+	std::cout << "PTHREAD_DFS_CHECKSUM "
 		<< std::hex << output_checksum << std::dec << '\n';
 	return 0;
 }

@@ -1,20 +1,23 @@
-# Bit-exact paged OSD candidate engine: Phase 0-8 report
+# Bit-exact paged OSD candidate engine: Phase 0-9 report
 
 ## Decision
 
 Keep the naïve cached/materialized P8 software architecture rejected. It is
 bit-exact but 10.72x slower than the production decoder.
 
-Stateful parity-only traversal is not a robust standalone optimization: it is
-1.16x faster under portable x86-64 O3 but 0.74x as fast under the host-native
-build. Dynamic pthread DFS-subtree scheduling is the viable software result. At
-eight workers it is bit-exact and measured 8.60x faster in the portable build
-and 5.26x faster in the host-native build, including thread creation and join.
+Dynamic pthread DFS-subtree scheduling is the robust software result. A direct
+A/B with identical scheduling measured 4.59x host-native full-decoder speedup
+for full 128-byte state and 4.54x for parity-only state at eight workers. In a
+portable x86-64 build, the respective results were 5.52x and 7.80x.
 
-Do not replace the production loop yet. The result is from one nine-CPU host,
-one code/order, and deterministic synthetic inputs. The next gate is a
-persistent pool plus affinity, additional workloads, and loaded-system tail
-latency. RTL remains unchanged in Phase 8.
+Across three complete benchmark processes per compiler target, parity-only state
+made the portable pthread kernel about 40% faster but was effectively tied with
+full-state under the host-native build. Therefore parity-delta is an optional,
+target-benchmarked kernel, not the general source of the pthread speedup.
+
+Do not replace the production loop yet. The next gate is a persistent worker
+pool supporting both kernels, followed by affinity, broader workloads,
+concurrent instances, and loaded-system tail latency. RTL remains unchanged.
 
 ## Research question
 
@@ -225,6 +228,26 @@ Full methodology, limitations, and machine-readable results are in
 `experiments/NATIVE_PARITY_PTHREAD_FINDINGS.md` and
 `experiments/results/native_parity_pthread_*_summary.csv`.
 
+### 9. Full-state pthread DFS isolated the source of the gain
+
+The Phase 9 control held subtree partitioning, dynamic scheduling, thread
+counts, candidate indices and result reduction constant while changing only the
+worker state representation.
+
+At eight workers, the portable build measured 1.528 ms/block for full-state DFS
+and 1.081 ms/block for parity-only DFS, versus 8.438 ms baseline. The host-native
+build measured 0.864 ms full-state and 0.873 ms parity-only, versus 3.966 ms
+baseline. All paths remained bit-exact.
+
+Three full process runs per compiler target gave median full/parity ratios of
+1.398 for portable x86-64 and 0.998 for host-native. Thus pthread DFS is
+independently valuable; parity-only state is strongly useful in the portable
+build but neutral under the native target.
+
+The full-state path passed Address/Undefined sanitizers, ThreadSanitizer and the
+complete bounded repository suite. Detailed results are in
+`experiments/results/pthread_dfs_ab_*.csv`.
+
 ## Reproduction
 
 Software:
@@ -254,11 +277,11 @@ Machine-readable results are under `experiments/results/`.
 
 ## Next gated experiment
 
-Replace per-block pthread creation with a persistent pool, then test affinity,
-loaded-system p95, realistic channel traces, multiple code lengths/orders, and
-multiple concurrent decoder instances. Production integration is gated on
-exactness and speed surviving those checks. Keep RTL unchanged during this
-software phase.
+Implement a persistent pthread pool with both full-state and parity-only worker
+kernels. Compare affinity, loaded-system p95, realistic channel traces, multiple
+code lengths/orders, and concurrent decoder instances. Use full-state pthread
+DFS as the control; enable parity-only state only when the deployment compiler
+and CPU show a repeatable advantage. Keep RTL unchanged during this phase.
 
 ## Limitations
 
