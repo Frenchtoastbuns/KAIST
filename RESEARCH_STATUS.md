@@ -7,7 +7,7 @@
 - Baseline commit: `e6cfc5b0f71d8e82d6cba2184b1edf0486f64238`
 - Current phase: Phase 12 complete — exact-stop plus pthread fallback validated; persistence conditional
 - Upstream production integration: not started; opt-in experiment only
-- Latest focused CI: Phase 11 GitHub Actions run #109 passed; Phase 12 local suite and sanitizers passed
+- Latest focused CI: Phase 12 GitHub Actions run #112 passed; Phase 12 local suite and sanitizers passed
 
 ## Claim boundary
 
@@ -368,7 +368,7 @@ Software:
 make -C experiments clean test CXX='g++ -march=x86-64'
 ```
 
-RTL validation is encoded in `.github/workflows/osd-research.yml`. Phase 11 run #109:
+RTL validation is encoded in `.github/workflows/osd-research.yml`. Phase 12 run #112:
 
 - built the upstream OSD regression target;
 - ran the bounded C++ and Python suite;

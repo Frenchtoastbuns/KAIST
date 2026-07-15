@@ -335,7 +335,7 @@ Recorded software environment:
 - G++ 13.3.0;
 - C++17 and `-O2`.
 
-Phase 11 GitHub Actions run #109 used Icarus Verilog 12.0 and Yosys 0.33. It built the
+Phase 12 GitHub Actions run #112 used Icarus Verilog 12.0 and Yosys 0.33. It built the
 upstream regression target, passed the bounded software suite, passed both RTL
 simulations, and synthesized P=1,8,16 with zero reported Yosys problems.
 
