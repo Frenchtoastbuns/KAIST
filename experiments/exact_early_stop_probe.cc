@@ -59,6 +59,8 @@ constexpr uint64_t EXPECTED_CANDIDATES = 679121;
 
 bool early_stop_enabled = false;
 bool stop_taken = false;
+bool capture_enabled = false;
+bool capture_only_enabled = false;
 
 struct Completion {
 	int best = 0;
@@ -68,8 +70,16 @@ struct Completion {
 
 Completion completion;
 
+struct SearchCapture {
+	std::array<int8_t, K * W> matrix{};
+	std::array<int8_t, W> base{};
+	std::array<int8_t, W> soft{};
+};
+
+SearchCapture capture;
+
 bool search_override(
-	const int8_t *,
+	const int8_t *matrix,
 	const int8_t *base,
 	int8_t *candidate,
 	const int8_t *soft,
@@ -82,6 +92,22 @@ bool search_override(
 	int &next
 )
 {
+	if (capture_enabled) {
+		std::copy(matrix, matrix + K * W, capture.matrix.begin());
+		std::copy(base, base + W, capture.base.begin());
+		std::copy(soft, soft + W, capture.soft.begin());
+	}
+	if (capture_only_enabled) {
+		int metric = 0;
+		for (int index = 0; index < length; ++index)
+			metric += (1 - 2 * base[index]) * soft[index];
+		std::copy(base, base + length, candidate);
+		for (int index = length; index < width; ++index)
+			candidate[index] = 0;
+		best = metric;
+		next = -1;
+		return true;
+	}
 	if (!early_stop_enabled)
 		return false;
 	assert(length == N);
@@ -152,6 +178,19 @@ DecodeResult decode_once(
 	return result;
 }
 
+void capture_once(
+	CODE::OrderedStatisticsDecoder<N, K, O> &decoder,
+	const std::array<int8_t, N> &soft,
+	const int8_t *genmat
+)
+{
+	capture_enabled = true;
+	capture_only_enabled = true;
+	decode_once(decoder, soft, genmat, false);
+	capture_only_enabled = false;
+	capture_enabled = false;
+}
+
 uint64_t percentile(std::vector<uint64_t> values, double fraction)
 {
 	std::sort(values.begin(), values.end());
@@ -168,7 +207,90 @@ struct SnrResult {
 	uint64_t stopped_total_ns = 0;
 	uint64_t baseline_p95_ns = 0;
 	uint64_t stopped_p95_ns = 0;
+	uint64_t bound_candidates_total = 0;
+	uint64_t combined_candidates_total = 0;
+	uint64_t bound_p95_candidates = 0;
+	uint64_t combined_p95_candidates = 0;
+	uint64_t pruned_tasks_total = 0;
 };
+
+struct BoundResult {
+	uint64_t candidates = 0;
+	uint64_t pruned_tasks = 0;
+};
+
+BoundResult analyze_subtree_bound(int best, int next)
+{
+	constexpr uint64_t SEED_CANDIDATES =
+		1 + K + static_cast<uint64_t>(K) * (K - 1) / 2;
+	BoundResult result;
+	result.candidates = EXPECTED_CANDIDATES;
+	std::array<std::array<uint8_t, N - K>, K + 1> parity_reachable{};
+	for (int row = K - 1; row >= 0; --row) {
+		parity_reachable[static_cast<std::size_t>(row)] =
+			parity_reachable[static_cast<std::size_t>(row + 1)];
+		for (int parity = 0; parity < N - K; ++parity)
+			if (capture.matrix[row * W + K + parity])
+				parity_reachable[static_cast<std::size_t>(row)]
+					[static_cast<std::size_t>(parity)] = 1;
+	}
+
+	for (int a = 0; a < K; ++a) {
+		for (int b = a + 1; b < K; ++b) {
+			std::array<int8_t, W> word = capture.base;
+			for (const int row: {a, b})
+				for (int offset = 0; offset < W; ++offset)
+					word[static_cast<std::size_t>(offset)] ^=
+						capture.matrix[row * W + offset];
+
+			int systematic_metric = 0;
+			for (int index = 0; index < K; ++index)
+				systematic_metric +=
+					(1 - 2 * word[static_cast<std::size_t>(index)]) *
+					capture.soft[index];
+			int first_gain = 0;
+			int second_gain = 0;
+			for (int index = b + 1; index < K; ++index) {
+				const int gain = -2 *
+					(1 - 2 * word[static_cast<std::size_t>(index)]) *
+					capture.soft[index];
+				if (gain > first_gain) {
+					second_gain = first_gain;
+					first_gain = gain;
+				} else if (gain > second_gain) {
+					second_gain = gain;
+				}
+			}
+			int parity_upper_bound = 0;
+			for (int index = K; index < N; ++index) {
+				if (parity_reachable[static_cast<std::size_t>(b + 1)]
+					[static_cast<std::size_t>(index - K)]) {
+					parity_upper_bound += std::abs(
+						static_cast<int>(capture.soft[index])
+					);
+				} else {
+					parity_upper_bound +=
+						(1 - 2 * word[static_cast<std::size_t>(index)]) *
+						capture.soft[index];
+				}
+			}
+			const int upper_bound = systematic_metric +
+				first_gain + second_gain + parity_upper_bound;
+			if (upper_bound <= next && upper_bound < best) {
+				const uint64_t remaining =
+					static_cast<uint64_t>(K - b - 1);
+				const uint64_t descendants =
+					remaining + remaining * (remaining - 1) / 2;
+				if (descendants) {
+					result.candidates -= descendants;
+					++result.pruned_tasks;
+				}
+			}
+		}
+	}
+	assert(result.candidates >= SEED_CANDIDATES);
+	return result;
+}
 
 }
 
@@ -233,6 +355,8 @@ int main(int argc, char **argv)
 		summary.snr_db = snr_db;
 		std::vector<uint64_t> baseline_samples;
 		std::vector<uint64_t> stopped_samples;
+		std::vector<uint64_t> bound_candidate_samples;
+		std::vector<uint64_t> combined_candidate_samples;
 		for (int frame = 0; frame < FRAMES; ++frame) {
 			DecodeResult baseline;
 			DecodeResult stopped;
@@ -262,14 +386,35 @@ int main(int argc, char **argv)
 			else
 				assert(baseline.unique);
 
+			capture_once(decoder, frames[frame], genmat);
+			const BoundResult bound = analyze_subtree_bound(
+				baseline.completion_state.best,
+				baseline.completion_state.next
+			);
+			const uint64_t combined_candidates = stopped.stopped
+				? 1
+				: bound.candidates;
 			summary.exact_stops += stopped.stopped;
 			summary.baseline_total_ns += baseline.elapsed_ns;
 			summary.stopped_total_ns += stopped.elapsed_ns;
+			summary.bound_candidates_total += bound.candidates;
+			summary.combined_candidates_total += combined_candidates;
+			summary.pruned_tasks_total += bound.pruned_tasks;
 			baseline_samples.push_back(baseline.elapsed_ns);
 			stopped_samples.push_back(stopped.elapsed_ns);
+			bound_candidate_samples.push_back(bound.candidates);
+			combined_candidate_samples.push_back(combined_candidates);
 		}
 		summary.baseline_p95_ns = percentile(baseline_samples, 0.95);
 		summary.stopped_p95_ns = percentile(stopped_samples, 0.95);
+		summary.bound_p95_candidates = percentile(
+			bound_candidate_samples,
+			0.95
+		);
+		summary.combined_p95_candidates = percentile(
+			combined_candidate_samples,
+			0.95
+		);
 		results.push_back(summary);
 	}
 
@@ -278,7 +423,11 @@ int main(int argc, char **argv)
 		csv.open(argv[1]);
 		csv << "ebn0_db,frames,exact_stops,stop_rate,mean_candidates,"
 			"candidate_reduction,baseline_mean_ns,early_mean_ns,"
-			"speedup,baseline_p95_ns,early_p95_ns,result\n";
+			"speedup,baseline_p95_ns,early_p95_ns,"
+			"oracle_bound_mean_candidates,oracle_bound_reduction,"
+			"oracle_bound_p95_candidates,combined_mean_candidates,"
+			"combined_reduction,combined_p95_candidates,"
+			"mean_pruned_tasks,result\n";
 	}
 
 	for (const auto &result: results) {
@@ -295,6 +444,16 @@ int main(int argc, char **argv)
 		const double early_mean =
 			static_cast<double>(result.stopped_total_ns) / FRAMES;
 		const double speedup = baseline_mean / early_mean;
+		const double bound_mean_candidates =
+			static_cast<double>(result.bound_candidates_total) / FRAMES;
+		const double bound_reduction =
+			1.0 - bound_mean_candidates / EXPECTED_CANDIDATES;
+		const double combined_mean_candidates =
+			static_cast<double>(result.combined_candidates_total) / FRAMES;
+		const double combined_reduction =
+			1.0 - combined_mean_candidates / EXPECTED_CANDIDATES;
+		const double mean_pruned_tasks =
+			static_cast<double>(result.pruned_tasks_total) / FRAMES;
 
 		std::cout << "EXACT_STOP_RESULT ebn0_db=" << result.snr_db
 			<< " stops=" << result.exact_stops << '/' << FRAMES
@@ -303,16 +462,31 @@ int main(int argc, char **argv)
 			<< " mean_candidates=" << static_cast<uint64_t>(
 				candidates_per_frame
 			)
-			<< " speedup=" << speedup << '\n';
+			<< " speedup=" << speedup
+			<< " oracle_bound_mean_candidates="
+			<< static_cast<uint64_t>(bound_mean_candidates)
+			<< " oracle_bound_p95_candidates="
+			<< result.bound_p95_candidates
+			<< " combined_mean_candidates="
+			<< static_cast<uint64_t>(combined_mean_candidates)
+			<< " combined_p95_candidates="
+			<< result.combined_p95_candidates
+			<< " mean_pruned_tasks=" << mean_pruned_tasks << '\n';
 		if (csv)
-			csv << std::fixed << std::setprecision(3) << result.snr_db
+			csv << std::fixed << std::setprecision(6) << result.snr_db
 				<< ',' << FRAMES << ',' << result.exact_stops << ','
 				<< stop_rate << ',' << candidates_per_frame << ','
 				<< candidate_reduction << ','
 				<< static_cast<uint64_t>(baseline_mean) << ','
-				<< static_cast<uint64_t>(early_mean) << ','
-				<< speedup << ',' << result.baseline_p95_ns << ','
-				<< result.stopped_p95_ns << ",pass\n";
+					<< static_cast<uint64_t>(early_mean) << ','
+					<< speedup << ',' << result.baseline_p95_ns << ','
+					<< result.stopped_p95_ns << ','
+					<< bound_mean_candidates << ',' << bound_reduction << ','
+					<< result.bound_p95_candidates << ','
+					<< combined_mean_candidates << ','
+					<< combined_reduction << ','
+					<< result.combined_p95_candidates << ','
+					<< mean_pruned_tasks << ",pass\n";
 	}
 	return 0;
 }

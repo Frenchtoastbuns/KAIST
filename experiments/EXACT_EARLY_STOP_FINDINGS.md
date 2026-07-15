@@ -53,3 +53,41 @@ Proceed only to a second gate that develops a stronger safe subtree bound or a
 carefully quantified probabilistic stopping rule. Combine it with the pthread
 fallback and require p95/p99 improvement, broader codes/SNRs, and comparison
 with published OSD stopping and discarding methods.
+
+## Stronger exact subtree-bound gate
+
+The second gate tested a generator-aware safe bound before implementing a
+scheduler. For every depth-two DFS prefix, it used:
+
+- the exact systematic metric of the prefix;
+- the two largest positive systematic gains available below that prefix; and
+- a parity upper bound derived from the remaining generator-row support.
+
+A parity position that no remaining row could flip kept its current metric
+contribution; a reachable position used `abs(LLR)`. A subtree was countable as
+pruned only when its upper bound could change neither the final winner nor the
+runner-up. The completed exhaustive search's final best and runner-up metrics
+were supplied as oracle thresholds. This makes the candidate counts optimistic:
+the threshold is not available at the start of a real parallel search, bound
+evaluation cost is excluded, and no production pruning was implemented.
+
+| Eb/N0 | Bound mean candidates | Bound reduction | Bound p95 | Combined mean candidates | Combined p95 |
+|---:|---:|---:|---:|---:|---:|
+| 4 dB | 679,086.402 | 0.0051% | 679,115 | 679,086.402 | 679,115 |
+| 6 dB | 679,092.604 | 0.0042% | 679,119 | 643,779.476 | 679,119 |
+| 8 dB | 679,096.814 | 0.0036% | 679,119 | 334,115.762 | 679,115 |
+| 10 dB | 679,101.002 | 0.0029% | 679,120 | 51,612.268 | 679,087 |
+
+`Combined` applies the order-0 exact stop first and the oracle-threshold
+subtree bound only on misses. The bound saves just 20--35 candidates per frame
+out of 679,121. Its p95 work is effectively a full exhaustive search at every
+SNR.
+
+### Second-gate decision
+
+Reject this subtree-bound formulation. It cannot repay its own bookkeeping and
+does not improve tail work, even with final thresholds supplied for free. Do
+not implement a cancellation scheduler around it. The order-0 exact stop
+remains useful only for high-SNR mean throughput, while pthread DFS remains the
+fallback acceleration path. Reopen exact subtree pruning only if a
+fundamentally tighter, cheaply computable bound is identified.

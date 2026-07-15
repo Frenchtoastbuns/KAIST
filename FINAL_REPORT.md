@@ -1,4 +1,4 @@
-# Bit-exact paged OSD candidate engine: Phase 0-10 report
+# Bit-exact paged OSD candidate engine: Phase 0-11 report
 
 ## Decision
 
@@ -15,9 +15,14 @@ made the portable pthread kernel about 40% faster but was effectively tied with
 full-state under the host-native build. Therefore parity-delta is an optional,
 target-benchmarked kernel, not the general source of the pthread speedup.
 
-Do not replace the production loop yet. The next gate is a persistent worker
-pool supporting both kernels, followed by affinity, broader workloads,
-concurrent instances, and loaded-system tail latency. RTL remains unchanged.
+Phase 11 rejected the tested generator-aware exact subtree bound: even with
+final best/runner-up metrics supplied as oracle thresholds, it removed less
+than 0.006% of candidate work and left p95 effectively exhaustive.
+
+Do not replace the production loop yet. The next engineering gate is a
+persistent worker pool supporting both kernels, followed by affinity, broader
+workloads, concurrent instances, and loaded-system tail latency. RTL remains
+unchanged.
 
 ## Research question
 
@@ -263,6 +268,26 @@ frames still exceed the p95 boundary and execute the full search. It supports a
 high-SNR average-throughput direction, but the absolute-bound check is
 straightforward and is not itself a publishable novelty.
 
+### 11. The stronger safe subtree-bound formulation is not viable
+
+Before implementing parallel cancellation, the probe evaluated every depth-two
+DFS prefix with a safe generator-aware upper bound. It combined the exact prefix
+systematic metric, the two largest remaining positive systematic gains, and a
+parity bound that kept unreachable bits fixed while allowing reachable bits to
+attain `abs(LLR)`.
+
+The final exhaustive best and runner-up metrics were supplied as oracle
+thresholds, and bound-computation time was excluded. Despite those advantages,
+mean work fell by only 0.0051%, 0.0042%, 0.0036%, and 0.0029% at 4, 6, 8, and
+10 dB. Bound-only p95 work remained between 679,115 and 679,120 candidates out
+of 679,121. Combining it with the order-0 stop left p95 between 679,087 and
+679,119 candidates.
+
+Reject this formulation. It cannot repay its own bookkeeping and does not
+support a tail-latency claim. A cancellation scheduler should not be built
+around it. Exact subtree pruning should be reopened only for a fundamentally
+tighter, cheaply computable bound.
+
 ## Reproduction
 
 Software:
@@ -278,7 +303,7 @@ Recorded software environment:
 - G++ 13.3.0;
 - C++17 and `-O2`.
 
-GitHub Actions run #64 used Icarus Verilog 12.0 and Yosys 0.33. It built the
+Phase 10 GitHub Actions run #107 used Icarus Verilog 12.0 and Yosys 0.33. It built the
 upstream regression target, passed the bounded software suite, passed both RTL
 simulations, and synthesized P=1,8,16 with zero reported Yosys problems.
 
@@ -292,15 +317,19 @@ Machine-readable results are under `experiments/results/`.
 
 ## Next gated experiment
 
-Combine the exact order-0 precheck with a persistent pthread fallback, then test
-a stronger safe subtree bound or a probabilistic stopping rule with quantified
-BLER loss. Require p95/p99 gains across realistic SNRs and broader workloads,
-and compare against published stopping/discarding OSD methods. Keep RTL
-unchanged during this phase.
+Keep exact pthread DFS as the robust measured software result. If implementation
+continues, build a persistent worker pool, apply the order-0 exact stop before
+the fallback, select full-state or parity workers only after target benchmarking,
+and measure p50/p95/p99 across affinity, system load, concurrent instances,
+additional codes, and additional OSD orders. Do not pursue the rejected
+generator-aware subtree bound. Evaluate probabilistic stopping only with an
+explicit BLER budget and published-method comparisons. Keep RTL unchanged.
 
 ## Limitations
 
 - Software timing comes from one host and compiler configuration.
+- The Phase 11 subtree result is an oracle-threshold candidate-count study, not
+  an implemented scheduler timing result.
 - TEP delivery timings are Python implementation measurements and should not be
   presented as compiled-decoder or hardware throughput.
 - Fixed-seed integer soft values validate architecture; they are not an
@@ -316,14 +345,19 @@ unchanged during this phase.
 
 ## Supported claim
 
-> For the tested upstream traversal, parity-only scoring and bounded
-> prefix-delta pages preserve candidate order, metrics, ties, and decoded output;
-> a multi-cycle parameterized RTL page engine matches deterministic golden pages
-> and reduces generic P8 synthesis cells by about 11.5x versus the direct
-> combinational realization. A naïve software composition of persistent cache,
-> materialized P8 pages and parity-only scoring is bit-exact but 10.72x slower
-> than the production decoder and is rejected.
+> For BCH(127,64), order-4 decoding in the tested upstream implementation,
+> dynamic exact pthread DFS subtree scheduling is the only robust measured
+> software acceleration. Full-state and parity-only workers were effectively
+> tied under host-native optimization, while parity was faster in the portable
+> build. An exact order-0 stop greatly reduces high-SNR mean work but not p95.
+> The tested generator-aware safe subtree bound removes less than 0.006% of work
+> even with oracle thresholds and is rejected.
+
+The earlier paged/parity artifacts remain useful as exact architecture studies:
+bounded prefix-delta pages preserve results, the sequential RTL is about 11.5x
+smaller in generic P8 synthesis than the combinational baseline, and the naïve
+cached P8 software composition is 10.72x slower than production.
 
 This does not claim a new OSD algorithm, novelty of generator-row flipping,
-FPGA acceleration, end-to-end speedup, energy improvement, post-route results,
-or silicon results.
+FPGA acceleration, end-to-end production integration, energy improvement,
+post-route results, or silicon results.

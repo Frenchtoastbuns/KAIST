@@ -5,9 +5,9 @@
 - Branch: `research/osd-paged-vector`
 - Draft PR: #1
 - Baseline commit: `e6cfc5b0f71d8e82d6cba2184b1edf0486f64238`
-- Current phase: Phase 10 complete — exact order-0 early-stop viability measured
+- Current phase: Phase 11 complete — generator-aware exact subtree bound rejected
 - Upstream production integration: not started; opt-in experiment only
-- Latest focused CI: GitHub Actions run #101, passed; Phase 8 local suite passed
+- Latest focused CI: Phase 10 GitHub Actions run #107 passed; Phase 11 local suite passed
 
 ## Claim boundary
 
@@ -39,6 +39,7 @@ new decoding-algorithm claim is made.
 | 8 | Native parity plus pthread DFS subtrees | Exact; pthread direction passes |
 | 9 | Full-state versus parity pthread DFS A/B | Exact; pthread robust, parity target-dependent |
 | 10 | Exact absolute-bound early-stop probe | High-SNR mean benefit; p95 unchanged |
+| 11 | Generator-aware exact subtree-bound gate | Saves <0.006% work even with oracle thresholds; reject |
 
 ## Production traversal
 
@@ -260,6 +261,32 @@ high-SNR average-work opportunity, but not a tail-latency contribution: even at
 10 dB the 7.6% miss rate leaves p95 on the exhaustive path. The check is also
 straightforward and is not claimed as novel.
 
+## Generator-aware exact subtree-bound gate
+
+Phase 11 tested the proposed stronger safe bound before building a cancellation
+scheduler. For each depth-two DFS prefix, the probe combined the exact current
+systematic metric, the two largest positive systematic gains still available,
+and a parity upper bound derived from the remaining generator-row support.
+Parity positions unreachable by all remaining rows kept their current metric
+contribution; reachable positions used `abs(LLR)`.
+
+The completed exhaustive search supplied the final best and runner-up metrics as
+oracle thresholds. Bound-evaluation cost was excluded. The result is therefore
+optimistic for this bound.
+
+| Eb/N0 | Bound mean candidates | Bound reduction | Bound p95 | Combined mean | Combined p95 |
+|---:|---:|---:|---:|---:|---:|
+| 4 dB | 679,086.402 | 0.0051% | 679,115 | 679,086.402 | 679,115 |
+| 6 dB | 679,092.604 | 0.0042% | 679,119 | 643,779.476 | 679,119 |
+| 8 dB | 679,096.814 | 0.0036% | 679,119 | 334,115.762 | 679,115 |
+| 10 dB | 679,101.002 | 0.0029% | 679,120 | 51,612.268 | 679,087 |
+
+The safe bound saves only 20--35 candidates per 679,121-candidate frame. Its
+p95 work is effectively exhaustive, and any real bookkeeping would outweigh
+the saved work. Reject this formulation and do not build a scheduler around it.
+This does not prove that every possible exact bound must fail; it establishes
+that this generator-reachability formulation has no practical headroom.
+
 ## RTL evidence
 
 Two parameterized implementations are present:
@@ -304,7 +331,7 @@ Software:
 make -C experiments clean test CXX='g++ -march=x86-64'
 ```
 
-RTL validation is encoded in `.github/workflows/osd-research.yml`. Run #64:
+RTL validation is encoded in `.github/workflows/osd-research.yml`. Phase 10 run #107:
 
 - built the upstream OSD regression target;
 - ran the bounded C++ and Python suite;
@@ -316,13 +343,14 @@ Machine-readable outputs are in `experiments/results/`.
 
 ## Next gated phase
 
-1. Keep the cached/materialized-page software path rejected.
-2. Combine the exact order-0 precheck with a persistent pthread fallback.
-3. Develop and test a stronger safe subtree bound, or a probabilistic rule with
-   explicitly measured BLER loss.
-4. Require p95/p99 improvement, not only mean throughput, across realistic SNRs,
-   additional codes/orders, affinity, load, and concurrent instances.
-5. Compare against published OSD stopping/discarding methods.
-6. Keep full-state pthread DFS as the control and parity-only as a
-   target-benchmarked option.
+1. Keep cached/materialized pages rejected.
+2. Keep exact pthread DFS as the only robust measured software acceleration.
+3. Treat the order-0 exact stop as an optional high-SNR mean-throughput path,
+   not as a p95 solution.
+4. Reject the tested generator-aware subtree bound.
+5. If engineering continues, integrate a persistent worker pool and benchmark
+   p50/p95/p99 under affinity, system load, concurrent decoders, additional
+   codes/orders, and target-specific full-state versus parity worker selection.
+6. Test probabilistic stopping only if a measured BLER trade-off is acceptable
+   and compare it with published OSD stopping/discarding methods.
 7. Leave RTL unchanged during this software phase.
