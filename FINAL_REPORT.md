@@ -2,14 +2,14 @@
 
 ## Decision
 
-Proceed with an opt-in integration experiment using the sequential P=8
-parity-only prefix-delta engine. Keep P=16 as the mandatory throughput/area
-comparison and the upstream decoder as the bit-exact oracle.
+Reject the naïve combined software architecture that couples a persistent TEP
+cache, materialized P=8 prefix-delta pages and parity-only scoring. It is
+bit-exact but measured 10.72x slower than the production decoder.
 
-Do not replace the production candidate loop yet. The current evidence supports
-software exactness, bounded state, RTL functional equivalence on golden pages,
-and generic synthesis feasibility. It does not support FPGA timing, energy, or
-end-to-end decoder acceleration claims.
+For the next software gate, retain the native DFS flip traversal and integrate
+only stateful parity-only scoring. Continue the P=8/P=16 RTL work separately:
+hardware page parallelism must be established by mapped timing, not inferred
+from sequential software. Do not replace the production candidate loop yet.
 
 ## Research question
 
@@ -164,6 +164,38 @@ doubles nominal lane throughput for 1.55x the generic cells, but no mapped
 frequency is available. P8 is consequently the safer first integration point,
 not a proven final optimum.
 
+### 7. Combining every component produced a negative result
+
+The opt-in combined experiment retained the real production reliability sort,
+matrix permutation, row-echelon conversion, systematic conversion, encoding
+and output permutation. Only candidate search was replaced by:
+
+- the persistent 679,121-mask production-order cache;
+- P=8 bounded page processing;
+- adjacent-mask prefix parity deltas;
+- parity-only candidate state and scoring;
+- exact strict best/runner-up and tie handling.
+
+Nine fixed frames matched decoded bytes, uniqueness, best and runner-up scores,
+and the winning permuted candidate. Timing used two warm-up rounds, nine frames
+per repeat, nine repeats and alternating execution order.
+
+| Mode | Median ms/block | P95 ms/block | Candidate ms | Blocks/s |
+|---|---:|---:|---:|---:|
+| Production baseline | 10.104 | 11.035 | 10.014 | 98.972 |
+| Combined cached P8 parity | 108.315 | 122.776 | 108.226 | 9.232 |
+
+The combined path delivered only 0.0933x baseline throughput. It was 10.72x
+slower. This disproves the earlier informal idea that the isolated 5.99x TEP
+cache result and approximately 1.9x parity-only kernel result could be
+multiplied into an end-to-end gain.
+
+The underlying reason is architectural: the native DFS loop changes state
+in-place and is highly compiler-friendly. Reconstructing adjacent parity
+deltas and materializing page candidates duplicates transition work and adds
+short-loop/page overhead. This is a useful systems result, not a failed
+correctness test.
+
 ## Reproduction
 
 Software:
@@ -193,12 +225,15 @@ Machine-readable results are under `experiments/results/`.
 
 ## Next gated experiment
 
-The next implementation should integrate only sequential P8 behind an opt-in
-interface and compare it candidate-by-candidate with the production loop. It
-must add deterministic best/runner-up/tie reduction, ready/valid backpressure,
-reset/restart checks, and randomized page boundaries. Only after that gate
-passes should P=1,8,16 be mapped to a named FPGA and compared using LUTs,
-registers, RAMs, Fmax, latency, and throughput.
+The next software implementation should preserve the native recursive flip
+traversal and integrate only stateful parity-only scoring. It must repeat
+candidate, score, tie, decoded-output and end-to-end timing gates. The cached
+materialized-page path should remain an explicitly rejected comparison.
+
+The hardware track should add deterministic best/runner-up reduction,
+ready/valid backpressure, reset/restart checks and randomized page boundaries.
+Only then should P=1,8,16 be mapped to a named FPGA and compared using LUTs,
+registers, RAMs, Fmax, latency and throughput.
 
 ## Limitations
 
@@ -222,7 +257,9 @@ registers, RAMs, Fmax, latency, and throughput.
 > prefix-delta pages preserve candidate order, metrics, ties, and decoded output;
 > a multi-cycle parameterized RTL page engine matches deterministic golden pages
 > and reduces generic P8 synthesis cells by about 11.5x versus the direct
-> combinational realization.
+> combinational realization. A naïve software composition of persistent cache,
+> materialized P8 pages and parity-only scoring is bit-exact but 10.72x slower
+> than the production decoder and is rejected.
 
 This does not claim a new OSD algorithm, novelty of generator-row flipping,
 FPGA acceleration, end-to-end speedup, energy improvement, post-route results,
