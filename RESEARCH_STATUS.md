@@ -7,7 +7,7 @@
 - Baseline commit: `e6cfc5b0f71d8e82d6cba2184b1edf0486f64238`
 - Current phase: Phase 11 complete — generator-aware exact subtree bound rejected
 - Upstream production integration: not started; opt-in experiment only
-- Latest focused CI: Phase 10 GitHub Actions run #107 passed; Phase 11 local suite passed
+- Latest focused CI: Phase 11 GitHub Actions run #109 passed; Phase 11 local suite passed
 
 ## Claim boundary
 
@@ -331,7 +331,7 @@ Software:
 make -C experiments clean test CXX='g++ -march=x86-64'
 ```
 
-RTL validation is encoded in `.github/workflows/osd-research.yml`. Phase 10 run #107:
+RTL validation is encoded in `.github/workflows/osd-research.yml`. Phase 11 run #109:
 
 - built the upstream OSD regression target;
 - ran the bounded C++ and Python suite;
