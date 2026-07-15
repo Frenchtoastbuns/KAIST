@@ -1,7 +1,7 @@
 CXX ?= g++
 CXXFLAGS ?= -I.. -std=c++17 -O2 -W -Wall -Wextra -pedantic
 
-tests := osd_smoke_test tep_trace_test osd_operation_count_test osd_profile_test parity_delta_test candidate_stage_benchmark paged_candidate_test padding_state_test combined_decoder_benchmark native_parity_decoder_benchmark
+tests := osd_smoke_test tep_trace_test osd_operation_count_test osd_profile_test parity_delta_test candidate_stage_benchmark paged_candidate_test padding_state_test combined_decoder_benchmark native_parity_decoder_benchmark exact_early_stop_probe
 
 .PHONY: all test benchmark-tep clean
 
@@ -19,6 +19,7 @@ test: $(tests)
 	./padding_state_test
 	./combined_decoder_benchmark
 	./native_parity_decoder_benchmark
+	./exact_early_stop_probe
 
 native_parity_decoder_benchmark: native_parity_decoder_benchmark.cc
 	$(CXX) $(CXXFLAGS) -pthread $< -o $@

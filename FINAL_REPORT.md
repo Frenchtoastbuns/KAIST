@@ -1,4 +1,4 @@
-# Bit-exact paged OSD candidate engine: Phase 0-9 report
+# Bit-exact paged OSD candidate engine: Phase 0-10 report
 
 ## Decision
 
@@ -248,6 +248,21 @@ The full-state path passed Address/Undefined sanitizers, ThreadSanitizer and the
 complete bounded repository suite. Detailed results are in
 `experiments/results/pthread_dfs_ab_*.csv`.
 
+### 10. Exact order-0 stopping is viable only for high-SNR mean work
+
+A 2,000-frame BPSK/AWGN probe skipped exhaustive search only when the order-0
+metric reached the absolute `sum(abs(LLR))` bound. This condition is exact for
+nonzero LLRs.
+
+Stop rates were 0.0%, 5.2%, 50.8%, and 92.4% at 4, 6, 8, and 10 dB. Mean
+end-to-end speedups were 1.00x, 1.05x, 2.01x, and 12.07x. All decoded results
+matched exhaustive production decoding.
+
+The result does not improve p95 materially: at 10 dB the remaining 7.6% of
+frames still exceed the p95 boundary and execute the full search. It supports a
+high-SNR average-throughput direction, but the absolute-bound check is
+straightforward and is not itself a publishable novelty.
+
 ## Reproduction
 
 Software:
@@ -277,11 +292,11 @@ Machine-readable results are under `experiments/results/`.
 
 ## Next gated experiment
 
-Implement a persistent pthread pool with both full-state and parity-only worker
-kernels. Compare affinity, loaded-system p95, realistic channel traces, multiple
-code lengths/orders, and concurrent decoder instances. Use full-state pthread
-DFS as the control; enable parity-only state only when the deployment compiler
-and CPU show a repeatable advantage. Keep RTL unchanged during this phase.
+Combine the exact order-0 precheck with a persistent pthread fallback, then test
+a stronger safe subtree bound or a probabilistic stopping rule with quantified
+BLER loss. Require p95/p99 gains across realistic SNRs and broader workloads,
+and compare against published stopping/discarding OSD methods. Keep RTL
+unchanged during this phase.
 
 ## Limitations
 

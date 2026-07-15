@@ -5,7 +5,7 @@
 - Branch: `research/osd-paged-vector`
 - Draft PR: #1
 - Baseline commit: `e6cfc5b0f71d8e82d6cba2184b1edf0486f64238`
-- Current phase: Phase 9 complete — full-state versus parity pthread DFS A/B measured
+- Current phase: Phase 10 complete — exact order-0 early-stop viability measured
 - Upstream production integration: not started; opt-in experiment only
 - Latest focused CI: GitHub Actions run #101, passed; Phase 8 local suite passed
 
@@ -38,6 +38,7 @@ new decoding-algorithm claim is made.
 | 7 | Combined cached P8 parity-only software decoder | Correct but 10.72x slower; reject |
 | 8 | Native parity plus pthread DFS subtrees | Exact; pthread direction passes |
 | 9 | Full-state versus parity pthread DFS A/B | Exact; pthread robust, parity target-dependent |
+| 10 | Exact absolute-bound early-stop probe | High-SNR mean benefit; p95 unchanged |
 
 ## Production traversal
 
@@ -237,6 +238,28 @@ The new full-state path passed Address/Undefined sanitizers, ThreadSanitizer,
 and the complete bounded repository suite. Thread creation/join remains included
 per decoded block.
 
+## Exact early-stop viability probe
+
+Phase 10 tested the smallest provably safe early stop. After normal production
+preprocessing, exhaustive order-4 search is skipped only when the order-0
+candidate metric equals `sum(abs(LLR))`. With nonzero LLRs, no different
+codeword can equal or exceed that metric. Otherwise the unmodified exhaustive
+search runs.
+
+The test used 500 random encoded BCH(127,64) BPSK/AWGN frames per SNR:
+
+| Eb/N0 | Exact stops | Mean candidates | Mean speedup | Baseline p95 | Probe p95 |
+|---:|---:|---:|---:|---:|---:|
+| 4 dB | 0.0% | 679,121 | 1.00x | 4.519 ms | 4.477 ms |
+| 6 dB | 5.2% | 643,807 | 1.05x | 4.567 ms | 4.595 ms |
+| 8 dB | 50.8% | 334,128 | 2.01x | 4.473 ms | 4.439 ms |
+| 10 dB | 92.4% | 51,614 | 12.07x | 4.408 ms | 4.293 ms |
+
+All 2,000 outputs matched exhaustive decoding. The result establishes a
+high-SNR average-work opportunity, but not a tail-latency contribution: even at
+10 dB the 7.6% miss rate leaves p95 on the exhaustive path. The check is also
+straightforward and is not claimed as novel.
+
 ## RTL evidence
 
 Two parameterized implementations are present:
@@ -294,11 +317,12 @@ Machine-readable outputs are in `experiments/results/`.
 ## Next gated phase
 
 1. Keep the cached/materialized-page software path rejected.
-2. Build a persistent pthread pool supporting both full-state and parity-only
-   worker kernels.
-3. Measure affinity, loaded-system p95, realistic channel traces, additional
-   code lengths/orders, and multiple concurrent decoder instances.
-4. Treat full-state pthread DFS as the portable correctness/performance control.
-5. Enable parity-only state only where target-specific measurement shows a
-   repeatable benefit.
-6. Leave RTL unchanged during this software phase.
+2. Combine the exact order-0 precheck with a persistent pthread fallback.
+3. Develop and test a stronger safe subtree bound, or a probabilistic rule with
+   explicitly measured BLER loss.
+4. Require p95/p99 improvement, not only mean throughput, across realistic SNRs,
+   additional codes/orders, affinity, load, and concurrent instances.
+5. Compare against published OSD stopping/discarding methods.
+6. Keep full-state pthread DFS as the control and parity-only as a
+   target-benchmarked option.
+7. Leave RTL unchanged during this software phase.
