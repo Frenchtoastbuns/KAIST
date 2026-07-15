@@ -5,9 +5,9 @@
 - Branch: `research/osd-paged-vector`
 - Draft PR: #1
 - Baseline commit: `e6cfc5b0f71d8e82d6cba2184b1edf0486f64238`
-- Current phase: Phase 11 complete — generator-aware exact subtree bound rejected
+- Current phase: Phase 12 complete — exact-stop plus pthread fallback validated; persistence conditional
 - Upstream production integration: not started; opt-in experiment only
-- Latest focused CI: Phase 11 GitHub Actions run #109 passed; Phase 11 local suite passed
+- Latest focused CI: Phase 11 GitHub Actions run #109 passed; Phase 12 local suite and sanitizers passed
 
 ## Claim boundary
 
@@ -40,6 +40,7 @@ new decoding-algorithm claim is made.
 | 9 | Full-state versus parity pthread DFS A/B | Exact; pthread robust, parity target-dependent |
 | 10 | Exact absolute-bound early-stop probe | High-SNR mean benefit; p95 unchanged |
 | 11 | Generator-aware exact subtree-bound gate | Saves <0.006% work even with oracle thresholds; reject |
+| 12 | Persistent pthread plus exact-stop hybrid | Exact hybrid passes; persistence traffic/target-dependent |
 
 ## Production traversal
 
@@ -287,6 +288,42 @@ the saved work. Reject this formulation and do not build a scheduler around it.
 This does not prove that every possible exact bound must fail; it establishes
 that this generator-reachability formulation has no practical headroom.
 
+## Persistent pthread plus exact-stop hybrid
+
+Phase 12 compared production, spawn-per-block pthread DFS, sleeping persistent
+pthread DFS, and the exact order-0 stop in front of both full-state and
+parity-only fallbacks. Seven background pthreads plus the decoder caller form
+eight compute workers. Pool startup was measured separately and excluded from
+per-block latency.
+
+The BPSK/AWGN benchmark used 200 BCH(127,64), order-4 frames per SNR, three
+repeats, and both `-march=native` and `-march=x86-64`. Each row therefore has
+600 latency samples. All paths matched exhaustive decoded bytes, uniqueness,
+best metric, earliest winner, and non-stopped runner-up.
+
+Parity-hybrid tail results:
+
+| Build, Eb/N0 | Stop rate | Baseline p95/p99 | Exact spawn p95/p99 | Exact persistent p95/p99 |
+|---|---:|---:|---:|---:|
+| Native, 4 dB | 0.0% | 4.118 / 4.503 ms | 0.986 / 1.081 ms | 0.913 / 1.027 ms |
+| Native, 8 dB | 46.5% | 4.018 / 4.124 ms | 0.924 / 0.968 ms | 0.824 / 0.892 ms |
+| Native, 10 dB | 92.0% | 3.983 / 4.047 ms | 0.853 / 0.913 ms | 0.866 / 0.971 ms |
+| x86-64, 4 dB | 0.0% | 10.238 / 11.117 ms | 1.520 / 1.737 ms | 1.544 / 1.775 ms |
+| x86-64, 8 dB | 46.5% | 8.913 / 10.093 ms | 1.259 / 1.384 ms | 1.220 / 1.340 ms |
+| x86-64, 10 dB | 92.0% | 9.168 / 9.703 ms | 1.107 / 1.244 ms | 1.065 / 1.238 ms |
+
+The integrated exact-stop plus pthread fallback direction passes. Persistence
+helps most when fallback work is frequent or continuous. It is not an
+unconditional tail win: after long exact-stop idle intervals, condition-variable
+wake and scheduling costs can erase thread-creation savings. At native 10 dB,
+spawn-on-miss parity beats persistent parity at p95 and p99; portable 10 dB
+slightly favors persistence at those percentiles.
+
+Keep spawn-on-miss as the conservative high-SNR policy and persistent workers as
+an opt-in continuous-traffic policy. Keep full-state DFS as the control and
+select parity only after target/workload benchmarking. Address/Undefined
+sanitizers, ThreadSanitizer, and the complete bounded repository suite passed.
+
 ## RTL evidence
 
 Two parameterized implementations are present:
@@ -343,14 +380,15 @@ Machine-readable outputs are in `experiments/results/`.
 
 ## Next gated phase
 
-1. Keep cached/materialized pages rejected.
-2. Keep exact pthread DFS as the only robust measured software acceleration.
-3. Treat the order-0 exact stop as an optional high-SNR mean-throughput path,
-   not as a p95 solution.
-4. Reject the tested generator-aware subtree bound.
-5. If engineering continues, integrate a persistent worker pool and benchmark
-   p50/p95/p99 under affinity, system load, concurrent decoders, additional
-   codes/orders, and target-specific full-state versus parity worker selection.
-6. Test probabilistic stopping only if a measured BLER trade-off is acceptable
-   and compare it with published OSD stopping/discarding methods.
-7. Leave RTL unchanged during this software phase.
+1. Keep the exact order-0 stop plus exact pthread DFS fallback as the surviving
+   integrated CPU direction.
+2. Keep spawn-on-miss as the conservative high-SNR policy.
+3. Treat sleeping persistent workers as an opt-in continuous-traffic policy,
+   not the unconditional default.
+4. Retain full-state DFS as the control and choose parity only after target and
+   workload benchmarking.
+5. Before production integration, test affinity, loaded-system p99, concurrent
+   decoders, shared versus per-decoder pools, real arrival gaps, and additional
+   codes/orders.
+6. Keep cached/materialized pages and the tested subtree bound rejected.
+7. Leave RTL unchanged.

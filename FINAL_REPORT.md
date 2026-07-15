@@ -1,4 +1,4 @@
-# Bit-exact paged OSD candidate engine: Phase 0-11 report
+# Bit-exact paged OSD candidate engine: Phase 0-12 report
 
 ## Decision
 
@@ -19,10 +19,14 @@ Phase 11 rejected the tested generator-aware exact subtree bound: even with
 final best/runner-up metrics supplied as oracle thresholds, it removed less
 than 0.006% of candidate work and left p95 effectively exhaustive.
 
-Do not replace the production loop yet. The next engineering gate is a
-persistent worker pool supporting both kernels, followed by affinity, broader
-workloads, concurrent instances, and loaded-system tail latency. RTL remains
-unchanged.
+Phase 12 validates the integrated exact-stop plus pthread DFS fallback. A
+sleeping persistent pool improves many moderate-SNR comparisons but is not a
+universal tail-latency win after rare high-SNR misses; spawn-on-miss remains the
+conservative high-SNR policy.
+
+Do not replace the production loop yet. The next engineering gate is affinity,
+loaded-system tail latency, concurrent instances, real arrival gaps, broader
+codes/orders, and shared versus per-decoder pool policy. RTL remains unchanged.
 
 ## Research question
 
@@ -288,6 +292,34 @@ support a tail-latency claim. A cancellation scheduler should not be built
 around it. Exact subtree pruning should be reopened only for a fundamentally
 tighter, cheaply computable bound.
 
+### 12. Exact stopping plus pthread fallback passes; persistence is conditional
+
+The Phase 12 experiment compared production, spawn-per-block and sleeping
+persistent eight-worker DFS for full-state and parity kernels, both with and
+without the exact order-0 front end. It used 200 BPSK/AWGN frames at each of 4,
+6, 8, and 10 dB, three repeats, and native and portable compiler targets:
+21,600 timed decodes per build.
+
+Every path matched exhaustive decoded bytes, uniqueness, best metric, earliest
+winner, and non-stopped runner-up. Address/Undefined sanitizers,
+ThreadSanitizer, and the complete bounded suite passed.
+
+At native 8 dB, exact persistent parity measured 0.688/0.824/0.892 ms at
+p50/p95/p99 versus 0.791/0.924/0.968 ms for exact spawn parity and
+3.930/4.018/4.124 ms for production. At 10 dB, where 92.0% of frames stopped
+before DFS, exact spawn parity measured 0.022/0.853/0.913 ms and beat persistent
+parity's 0.023/0.866/0.971 ms at the tail.
+
+The portable build similarly favored persistence at 8 dB
+(0.923/1.220/1.340 ms versus 1.021/1.259/1.384 ms), while the 10 dB comparison
+was mixed: persistence lost at p50 but won slightly at p95/p99.
+
+The hybrid direction therefore passes, but persistence does not pass as an
+unconditional replacement. Keep spawn-on-miss for sparse high-SNR fallback
+traffic and persistent workers as a selectable continuous-traffic policy.
+Parity was fastest in these runs but remains target/workload-selected because
+earlier native controls found it tied with full-state.
+
 ## Reproduction
 
 Software:
@@ -317,17 +349,21 @@ Machine-readable results are under `experiments/results/`.
 
 ## Next gated experiment
 
-Keep exact pthread DFS as the robust measured software result. If implementation
-continues, build a persistent worker pool, apply the order-0 exact stop before
-the fallback, select full-state or parity workers only after target benchmarking,
-and measure p50/p95/p99 across affinity, system load, concurrent instances,
-additional codes, and additional OSD orders. Do not pursue the rejected
-generator-aware subtree bound. Evaluate probabilistic stopping only with an
-explicit BLER budget and published-method comparisons. Keep RTL unchanged.
+Keep exact order-0 stopping plus exact pthread DFS fallback as the surviving CPU
+path. Before production integration, measure affinity, loaded-system p99,
+concurrent decoder instances, shared versus per-decoder pools, real inter-arrival
+gaps, additional codes/orders, and full-state versus parity selection on each
+deployment target. Keep spawn-on-miss as the conservative sparse-traffic policy
+and sleeping persistence as an opt-in continuous-traffic policy. Do not reopen
+cached pages or the rejected subtree bound. Keep RTL unchanged.
 
 ## Limitations
 
 - Software timing comes from one host and compiler configuration.
+- Phase 12 uses 600 samples per row but only 200 unique channel frames, repeated
+  three times.
+- Pool startup/teardown, affinity, concurrent decoders, loaded-system behavior,
+  and real inter-arrival gaps are not included.
 - The Phase 11 subtree result is an oracle-threshold candidate-count study, not
   an implemented scheduler timing result.
 - TEP delivery timings are Python implementation measurements and should not be
@@ -345,19 +381,18 @@ explicit BLER budget and published-method comparisons. Keep RTL unchanged.
 
 ## Supported claim
 
-> For BCH(127,64), order-4 decoding in the tested upstream implementation,
-> dynamic exact pthread DFS subtree scheduling is the only robust measured
-> software acceleration. Full-state and parity-only workers were effectively
-> tied under host-native optimization, while parity was faster in the portable
-> build. An exact order-0 stop greatly reduces high-SNR mean work but not p95.
-> The tested generator-aware safe subtree bound removes less than 0.006% of work
-> even with oracle thresholds and is rejected.
+> For BCH(127,64), order-4 decoding in the tested upstream implementation, an
+> exact order-0 stop followed by exact eight-worker pthread DFS preserves
+> exhaustive output and provides a strong high-SNR fast path with a parallel
+> fallback. A sleeping persistent pool improves many continuous/moderate-SNR
+> cases but is not a universal p95/p99 win after rare high-SNR misses, so
+> spawn-on-miss and persistence must remain selectable traffic policies.
+> Full-state DFS remains the control; parity-only workers remain target- and
+> workload-selected.
 
-The earlier paged/parity artifacts remain useful as exact architecture studies:
-bounded prefix-delta pages preserve results, the sequential RTL is about 11.5x
-smaller in generic P8 synthesis than the combinational baseline, and the naïve
-cached P8 software composition is 10.72x slower than production.
+The tested generator-aware subtree bound remains rejected, cached/materialized
+P8 software remains 10.72x slower than production, and the earlier bounded-page
+and RTL artifacts remain architecture studies rather than CPU speed claims.
 
-This does not claim a new OSD algorithm, novelty of generator-row flipping,
-FPGA acceleration, end-to-end production integration, energy improvement,
-post-route results, or silicon results.
+This does not claim a new OSD algorithm, FPGA acceleration, production
+integration, energy improvement, post-route results, or silicon results.
