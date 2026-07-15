@@ -70,3 +70,35 @@ than regeneration while retaining only one mask payload.
 These timings isolate Python TEP generation/delivery plus checksum consumption.
 They do not include candidate construction, scoring, decoder integration, FPGA
 execution, or energy.
+
+
+## Combined end-to-end decoder experiment
+
+The opt-in combined path used the production decoder's actual preprocessing and
+output permutation. Its candidate stage combined:
+
+- the persistent 679,121-mask production-order cache;
+- P=8 page boundaries;
+- page-local adjacent-mask parity deltas;
+- parity-only candidate state and scoring;
+- the original strict best/runner-up and tie rule.
+
+Nine fixed frames were checked against the unmodified path before timing.
+Decoded bytes, uniqueness, best score, runner-up score and winning permuted
+candidate matched exactly. Timing used two warm-up rounds, nine frames per
+repeat, nine repeats and alternating mode order.
+
+| Mode | Median ms/block | P95 ms/block | Candidate ms | Blocks/s |
+|---|---:|---:|---:|---:|
+| Production baseline | 10.104 | 11.035 | 10.014 | 98.972 |
+| Combined cached P8 parity path | 108.315 | 122.776 | 108.226 | 9.232 |
+
+The combined path achieved 0.0933x baseline throughput: it was 10.72x slower.
+This negative result rejects the naïve software composition. Materializing
+adjacent parity deltas and page candidates duplicates work that the original
+in-place DFS traversal performs efficiently and prevents the component-level
+parity-only improvement from carrying into this architecture.
+
+The result does not invalidate the bit-exact RTL model. It means software
+persistent caching, software stateful parity-only traversal, and hardware page
+parallelism must not be multiplied together as independent speedups.
