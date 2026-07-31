@@ -46,6 +46,7 @@ module cap_corrected_differential_tb;
   integer errors=0,g,r,s,a,fd,count,rc,timeout; reg [63:0] meta_base,meta_mask; reg [13:0] meta_metric; integer meta_tie;
   integer q_suffix,q_budget,q_info,q_n,q_c; reg [63:0] q_states;
   reg [63:0] score_mask,score_states; integer score_info,score_expected;
+  reg seen_n,seen_c;
 
   task automatic read_normal(input integer group,input integer addr,output reg [9:0] value);
     integer guard; begin
@@ -74,9 +75,9 @@ module cap_corrected_differential_tb;
     cfg_row_we=1;for(g=0;g<GROUPS;g=g+1)for(r=0;r<K;r=r+1)begin @(negedge clk);cfg_row_group=g;cfg_row_rank=r;cfg_row_effect=rows[g*K+r][4:0];end cfg_row_we=0;
     cfg_phi_we=1;for(g=0;g<GROUPS;g=g+1)for(s=0;s<STATES;s=s+1)begin @(negedge clk);cfg_phi_group=g;cfg_phi_state=s;cfg_phi_cost=phi[g*STATES+s];end cfg_phi_we=0;
     cfg_info_we=1;for(r=0;r<K;r=r+1)begin @(negedge clk);cfg_info_rank=r;cfg_info_cost=info[r];end cfg_info_we=0;
-    @(negedge clk);build_start=1;@(negedge clk);build_start=0;timeout=0;
-    while((!build_done_n||!build_done_c)&&timeout<200000)begin @(negedge clk);timeout=timeout+1;end
-    if(timeout>=200000)$fatal(1,"builder timeout");
+    @(negedge clk);build_start=1;@(negedge clk);build_start=0;timeout=0;seen_n=0;seen_c=0;
+    while((!seen_n||!seen_c)&&timeout<200000)begin @(negedge clk);if(build_done_n)seen_n=1;if(build_done_c)seen_c=1;timeout=timeout+1;end
+    if(timeout>=200000)$fatal(1,"builder timeout n=%0d c=%0d",seen_n,seen_c);
     $display("BUILD_DONE normal=%0d s45=%0d",build_cycles_n,build_cycles_c);
 
     for(g=0;g<GROUPS;g=g+1)for(a=0;a<NORMAL_DEPTH;a=a+1)begin read_normal(g,a,got);if(got!==normal_exp[g*NORMAL_DEPTH+a])begin if(errors<20)$display("NORMAL_MISMATCH g=%0d a=%0d got=%h exp=%h",g,a,got,normal_exp[g*NORMAL_DEPTH+a]);errors=errors+1;end end
@@ -88,8 +89,9 @@ module cap_corrected_differential_tb;
       rc=$fscanf(fd,"%h %h %h %h %h %h",q_suffix,q_budget,q_info,q_states,q_n,q_c);if(rc!=6)$fatal(1,"query parse");
       @(negedge clk);dbg_query_suffix_n=q_suffix;dbg_query_budget_n=q_budget;dbg_query_info_n=q_info;dbg_query_states_n=q_states;dbg_query_start_n=1;
       dbg_query_suffix_c=q_suffix;dbg_query_budget_c=q_budget;dbg_query_info_c=q_info;dbg_query_states_c=q_states;dbg_query_start_c=1;
-      @(negedge clk);dbg_query_start_n=0;dbg_query_start_c=0;timeout=0;while((!dbg_query_done_n||!dbg_query_done_c)&&timeout<200)begin @(negedge clk);timeout=timeout+1;end
-      if(timeout>=200)$fatal(1,"query timeout");if(dbg_query_min_n!==q_n[13:0])begin if(errors<20)$display("NORMAL_QUERY_MISMATCH %0d got=%h exp=%h",r,dbg_query_min_n,q_n);errors=errors+1;end
+      @(negedge clk);dbg_query_start_n=0;dbg_query_start_c=0;timeout=0;seen_n=0;seen_c=0;
+      while((!seen_n||!seen_c)&&timeout<200)begin @(negedge clk);if(dbg_query_done_n)seen_n=1;if(dbg_query_done_c)seen_c=1;timeout=timeout+1;end
+      if(timeout>=200)$fatal(1,"query timeout n=%0d c=%0d",seen_n,seen_c);if(dbg_query_min_n!==q_n[13:0])begin if(errors<20)$display("NORMAL_QUERY_MISMATCH %0d got=%h exp=%h",r,dbg_query_min_n,q_n);errors=errors+1;end
       if(dbg_query_min_c!==q_c[13:0])begin if(errors<20)$display("S45_QUERY_MISMATCH %0d got=%h exp=%h",r,dbg_query_min_c,q_c);errors=errors+1;end
     end $fclose(fd);$display("QUERY_CHECK_DONE errors=%0d",errors);
 
@@ -97,12 +99,14 @@ module cap_corrected_differential_tb;
       rc=$fscanf(fd,"%h %h %h %h",score_mask,score_info,score_states,score_expected);if(rc!=4)$fatal(1,"score parse");
       @(negedge clk);dbg_score_mask_n=score_mask;dbg_score_info_n=score_info;dbg_score_states_n=score_states;dbg_score_start_n=1;
       dbg_score_mask_c=score_mask;dbg_score_info_c=score_info;dbg_score_states_c=score_states;dbg_score_start_c=1;
-      @(negedge clk);dbg_score_start_n=0;dbg_score_start_c=0;timeout=0;while((!dbg_score_done_n||!dbg_score_done_c)&&timeout<20)begin @(negedge clk);timeout=timeout+1;end
-      if(timeout>=20)$fatal(1,"score timeout");if(dbg_score_metric_n!==score_expected[13:0]||dbg_score_metric_c!==score_expected[13:0])begin if(errors<20)$display("SCORE_MISMATCH %0d n=%h c=%h exp=%h",r,dbg_score_metric_n,dbg_score_metric_c,score_expected);errors=errors+1;end
+      @(negedge clk);dbg_score_start_n=0;dbg_score_start_c=0;timeout=0;seen_n=0;seen_c=0;
+      while((!seen_n||!seen_c)&&timeout<20)begin @(negedge clk);if(dbg_score_done_n)seen_n=1;if(dbg_score_done_c)seen_c=1;timeout=timeout+1;end
+      if(timeout>=20)$fatal(1,"score timeout n=%0d c=%0d",seen_n,seen_c);if(dbg_score_metric_n!==score_expected[13:0]||dbg_score_metric_c!==score_expected[13:0])begin if(errors<20)$display("SCORE_MISMATCH %0d n=%h c=%h exp=%h",r,dbg_score_metric_n,dbg_score_metric_c,score_expected);errors=errors+1;end
     end $fclose(fd);$display("SCORE_CHECK_DONE errors=%0d",errors);
 
-    @(negedge clk);decode_start=1;@(negedge clk);decode_start=0;timeout=0;while((!decode_done_n||!decode_done_c)&&timeout<5000000)begin @(negedge clk);timeout=timeout+1;end
-    if(timeout>=5000000)$fatal(1,"decode timeout");
+    @(negedge clk);decode_start=1;@(negedge clk);decode_start=0;timeout=0;seen_n=0;seen_c=0;
+    while((!seen_n||!seen_c)&&timeout<5000000)begin @(negedge clk);if(decode_done_n)seen_n=1;if(decode_done_c)seen_c=1;timeout=timeout+1;end
+    if(timeout>=5000000)$fatal(1,"decode timeout n=%0d c=%0d",seen_n,seen_c);
     if(best_metric_n!==meta_metric||best_tep_n!==meta_mask||best_tied_n!==meta_tie)begin $display("NORMAL_FINAL_MISMATCH metric=%h/%h mask=%h/%h tie=%b/%0d",best_metric_n,meta_metric,best_tep_n,meta_mask,best_tied_n,meta_tie);errors=errors+1;end
     if(best_metric_c!==meta_metric||best_tep_c!==meta_mask||best_tied_c!==meta_tie)begin $display("S45_FINAL_MISMATCH metric=%h/%h mask=%h/%h tie=%b/%0d",best_metric_c,meta_metric,best_tep_c,meta_mask,best_tied_c,meta_tie);errors=errors+1;end
     $display("DECODE normal_cycles=%0d normal_issues=%0d normal_util_ppm=%0d s45_cycles=%0d s45_issues=%0d s45_util_ppm=%0d",decode_cycles_n,score_issues_n,(score_issues_n*250000)/decode_cycles_n,decode_cycles_c,score_issues_c,(score_issues_c*250000)/decode_cycles_c);
