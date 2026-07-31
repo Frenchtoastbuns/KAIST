@@ -1,6 +1,7 @@
 `include "cap_nb_part_00.svh"
 `include "cap_nb_part_01.svh"
 `include "cap_nb_part_02.svh"
+`include "cap_nb_part_02b.svh"
 `include "cap_nb_part_03.svh"
 `include "cap_nb_part_04.svh"
 `include "cap_nb_part_05.svh"
