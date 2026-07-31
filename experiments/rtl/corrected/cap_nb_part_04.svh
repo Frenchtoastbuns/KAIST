@@ -1,5 +1,20 @@
                     B_FINISH: begin
-                        build_busy<=0; build_done<=1; b_state<=B_IDLE;
+                        // Build the cumulative information-cost prefix after
+                        // all DP rows are complete.  The previous build-start
+                        // nonblocking loop used stale prefix values and reduced
+                        // each entry to one rank cost instead of a cumulative
+                        // sum.  b_suffix is zero on entry and is reused as the
+                        // sequential prefix index.
+                        if (b_suffix==0) begin
+                            info_prefix[0]<=0;
+                            b_suffix<=1;
+                        end else begin
+                            info_prefix[b_suffix]<=info_prefix[b_suffix-1]+info_cost[b_suffix-1];
+                            if (b_suffix==K) begin
+                                build_busy<=0; build_done<=1; b_state<=B_IDLE;
+                                b_suffix<=0;
+                            end else b_suffix<=b_suffix+1;
+                        end
                     end
                     default: b_state<=B_IDLE;
                 endcase
