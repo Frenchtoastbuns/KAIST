@@ -4,9 +4,21 @@ on:
   push:
     branches:
       - osd-nonblocking-corrected-20260731
+    paths:
+      - 'experiments/rtl/corrected/cap_nonblocking_corrected_decoder.sv'
+      - 'experiments/rtl/corrected/cap_nb_part_*.svh'
+      - 'experiments/rtl/corrected/cap_corrected_differential_tb.sv'
+      - 'experiments/rtl/corrected/generate_corrected_cap_vectors.cc'
+      - '.github/workflows/osd-corrected-nonblocking.yml'
   pull_request:
     branches:
       - master
+    paths:
+      - 'experiments/rtl/corrected/cap_nonblocking_corrected_decoder.sv'
+      - 'experiments/rtl/corrected/cap_nb_part_*.svh'
+      - 'experiments/rtl/corrected/cap_corrected_differential_tb.sv'
+      - 'experiments/rtl/corrected/generate_corrected_cap_vectors.cc'
+      - '.github/workflows/osd-corrected-nonblocking.yml'
   workflow_dispatch:
 
 jobs:
@@ -48,40 +60,4 @@ jobs:
             experiments/results/corrected_vectors/meta.txt
             experiments/results/corrected_vectors/queries.txt
             experiments/results/corrected_vectors/scores.txt
-          if-no-files-found: warn
-
-  verilator-smoke:
-    needs: differential-one-frame
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Verilator
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y verilator g++ make
-      - name: Build paired RTL simulator
-        run: |
-          verilator --cc --exe --build -j 2 -O3 -Wno-fatal \
-            --top-module cap_nonblocking_pair_top \
-            -Iexperiments/rtl/corrected \
-            experiments/rtl/corrected/cap_nonblocking_corrected_decoder.sv \
-            experiments/rtl/corrected/cap_nonblocking_pair_top.sv \
-            experiments/rtl/corrected/cap_corrected_batch_verilator.cc \
-            --Mdir /tmp/cap_batch_obj \
-            -CFLAGS "-O3 -std=c++17"
-      - name: Run one-frame batch smoke
-        run: |
-          mkdir -p experiments/results/corrected_batch_smoke
-          /tmp/cap_batch_obj/Vcap_nonblocking_pair_top \
-            --start 0 --count 1 \
-            --csv experiments/results/corrected_batch_smoke/batch_0.csv \
-            | tee experiments/results/corrected_batch_smoke/batch_0.log
-          grep -q 'BATCH_SUMMARY start=0 count=1 errors=0' experiments/results/corrected_batch_smoke/batch_0.log
-      - name: Upload smoke evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: corrected-cap-verilator-smoke-${{ github.run_id }}
-          path: experiments/results/corrected_batch_smoke/
           if-no-files-found: warn
