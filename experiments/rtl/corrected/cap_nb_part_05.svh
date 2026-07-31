@@ -146,6 +146,12 @@
                     end
                     default: d_state<=D_IDLE;
                 endcase
+                // The earlier per-lane nonblocking increments collapse when
+                // multiple lanes issue together.  This later assignment wins
+                // and accumulates the exact number of accepted lane issues.
+                score_issues<=score_issues+
+                    score_in_valid[0]+score_in_valid[1]+
+                    score_in_valid[2]+score_in_valid[3];
             end
         end
     end
