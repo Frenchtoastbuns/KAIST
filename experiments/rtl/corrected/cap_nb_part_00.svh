@@ -185,6 +185,7 @@ module cap_nonblocking_core #(
         end
     endfunction
 
+    `define packed packed_states
     function automatic [63:0] xor_row_states;
         input [63:0] packed_states;
         input [5:0] rank;
