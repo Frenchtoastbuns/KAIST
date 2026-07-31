@@ -1,13 +1,14 @@
         integer g;
         reg [63:0] value;
         begin
-            value = packed;
+            value = packed_states;
             for (g = 0; g < 12; g = g + 1)
                 value[g*5 +: 5] = value[g*5 +: 5] ^ row_effect[g][rank];
             value[63:60] = value[63:60] ^ row_effect[12][rank][3:0];
             xor_row_states = value;
         end
     endfunction
+    `undef packed
 
     function automatic [3:0] pair_left;
         input [3:0] pair;
