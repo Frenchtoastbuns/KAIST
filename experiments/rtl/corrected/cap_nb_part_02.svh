@@ -1,9 +1,10 @@
-        B_FINISH=11;
+        B_FINISH=11, B_PREFIX=12;
     reg [3:0] b_state;
     reg [6:0] b_suffix;
     reg [2:0] b_weight;
     reg [4:0] b_value_state;
     reg [3:0] b_pair;
+    reg [6:0] b_prefix_rank;
     integer bg;
     reg [9:0] build_min;
 
@@ -75,7 +76,7 @@
     );
     reg [11:0] task_count;
     reg [11:0] task_head;
-    reg pop_pending;
+    reg [1:0] pop_phase;
     reg [1:0] pop_context;
 
     localparam [3:0]
@@ -101,6 +102,9 @@
     reg grant_valid;
     reg [2:0] waiter_count;
     reg all_contexts_idle;
+    reg steal_valid;
+    reg [1:0] steal_ctx;
+    reg [2:0] issue_count_comb;
     reg [63:0] tmp_states;
     reg [METRIC_W-1:0] tmp_info;
     reg [63:0] tmp_mask;
@@ -184,7 +188,3 @@
                                 b_value_state ^ row_effect[cg][b_suffix]);
                         end
                     end else if (b_state==B_L_WRITE) begin
-                        compact_a_en[cg]=1; compact_a_we[cg]=1;
-                        compact_a_addr[cg]=compact_addr(b_suffix,b_pair,b_value_state);
-                        compact_a_wdata[cg]=(pair_left(b_pair)==0 || compact_a_q[cg]<=compact_b_q[cg])?
-                            compact_a_q[cg]:compact_b_q[cg];
