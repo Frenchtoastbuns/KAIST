@@ -1,4 +1,5 @@
         B_FINISH=11, B_PREFIX=12;
+    reg pop_pending;
     reg [3:0] b_state;
     reg [6:0] b_suffix;
     reg [2:0] b_weight;
