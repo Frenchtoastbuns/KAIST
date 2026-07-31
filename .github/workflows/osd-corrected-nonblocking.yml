@@ -1,0 +1,22 @@
+name: OSD corrected nonblocking validation
+
+on:
+  push:
+    branches:
+      - osd-nonblocking-corrected-20260731
+  workflow_dispatch:
+
+jobs:
+  syntax:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y iverilog yosys
+      - name: Compile normal and S45 tops
+        run: |
+          iverilog -g2012 -I experiments/rtl/corrected -s cap_nonblocking_normal_top -o /tmp/normal.vvp experiments/rtl/corrected/cap_nonblocking_corrected_decoder.sv
+          iverilog -g2012 -I experiments/rtl/corrected -s cap_nonblocking_s45_top -o /tmp/s45.vvp experiments/rtl/corrected/cap_nonblocking_corrected_decoder.sv
