@@ -177,14 +177,14 @@ module cap_nonblocking_core #(
     end
 
     function automatic [4:0] packed_group_state;
-        input [63:0] packed;
+        input [63:0] packed_states;
         input integer group;
         begin
-            if (group == 12) packed_group_state = {1'b0,packed[63:60]};
-            else packed_group_state = packed[group*5 +: 5];
+            if (group == 12) packed_group_state = {1'b0,packed_states[63:60]};
+            else packed_group_state = packed_states[group*5 +: 5];
         end
     endfunction
 
     function automatic [63:0] xor_row_states;
-        input [63:0] packed;
+        input [63:0] packed_states;
         input [5:0] rank;
