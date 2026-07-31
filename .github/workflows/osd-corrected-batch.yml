@@ -50,7 +50,7 @@ jobs:
             -Iexperiments/rtl/corrected \
             experiments/rtl/corrected/cap_nonblocking_corrected_decoder.sv \
             experiments/rtl/corrected/cap_nonblocking_pair_top.sv \
-            experiments/rtl/corrected/cap_corrected_batch_verilator.cc \
+            "$GITHUB_WORKSPACE/experiments/rtl/corrected/cap_corrected_batch_verilator.cc" \
             --Mdir /tmp/cap_batch_obj \
             -CFLAGS "-O3 -std=c++17"
       - name: Run one-frame smoke
