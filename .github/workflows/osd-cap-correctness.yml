@@ -1,0 +1,33 @@
+name: OSD CAP correctness
+
+on:
+  push:
+    branches:
+      - osd-cap-correct-nonblocking-20260731
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  elaborate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Icarus Verilog
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y iverilog
+      - name: Elaborate corrected normal CAP
+        run: |
+          iverilog -g2012 -I. -Wall \
+            -s cap_full_normal_corrected_top \
+            -o /tmp/cap_normal.vvp \
+            experiments/rtl/cap_full_compiled_decoder_corrected.sv
+      - name: Elaborate corrected S45 CAP
+        run: |
+          iverilog -g2012 -I. -Wall \
+            -s cap_full_s45_corrected_top \
+            -o /tmp/cap_s45.vvp \
+            experiments/rtl/cap_full_compiled_decoder_corrected.sv
