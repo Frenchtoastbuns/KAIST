@@ -17,6 +17,8 @@ read_verilog -sv -I experiments/rtl/corrected experiments/rtl/corrected/cap_nonb
 hierarchy -check -top $TOP
 check -assert
 synth_xilinx -family xc7 -top $TOP
+flatten
+opt_clean -purge
 check -assert
 tee -o $OUT/stat.json stat -json
 tee -o $OUT/stat_xilinx.txt stat -tech xilinx
