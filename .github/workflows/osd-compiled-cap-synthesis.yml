@@ -1,0 +1,59 @@
+name: OSD compiled CAP synthesis
+
+on:
+  push:
+    branches:
+      - osd-compiled-cap-synth-20260731
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  validate-query:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yosys iverilog
+      - name: SystemVerilog syntax check
+        run: |
+          iverilog -g2012 -s cap_streamed_normal_top -o /tmp/normal.vvp experiments/rtl/cap_threshold_compiled_query_engine.sv
+          iverilog -g2012 -s cap_compiled_s45_top -o /tmp/s45.vvp experiments/rtl/cap_threshold_compiled_query_engine.sv
+          iverilog -g2012 -s cap_compiled_s48_top -o /tmp/s48.vvp experiments/rtl/cap_threshold_compiled_query_engine.sv
+          iverilog -g2012 -s cap_full_normal_top -o /tmp/full_normal.vvp experiments/rtl/cap_full_compiled_decoder.sv
+          iverilog -g2012 -s cap_full_s45_top -o /tmp/full_s45.vvp experiments/rtl/cap_full_compiled_decoder.sv
+          iverilog -g2012 -s cap_full_s48_top -o /tmp/full_s48.vvp experiments/rtl/cap_full_compiled_decoder.sv
+      - name: Query-only Xilinx-7 synthesis
+        run: bash experiments/rtl/synth_compiled_cap.sh
+      - name: Upload query-only reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: compiled-cap-xilinx7-synthesis
+          path: experiments/results/compiled_cap_synthesis
+
+  synth-full:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        top: [cap_full_normal_top, cap_full_s45_top, cap_full_s48_top]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yosys iverilog
+      - name: Syntax check selected top
+        run: iverilog -g2012 -s ${{ matrix.top }} -o /tmp/full.vvp experiments/rtl/cap_full_compiled_decoder.sv
+      - name: Full Xilinx-7 synthesis
+        run: bash experiments/rtl/synth_full_one.sh ${{ matrix.top }}
+      - name: Upload full report
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-${{ matrix.top }}-xilinx7-synthesis
+          path: experiments/results/full_compiled_cap_synthesis/${{ matrix.top }}
