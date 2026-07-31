@@ -31,6 +31,18 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y verilator g++ make
+      - name: Apply Verilator-compatible reset spelling
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('experiments/rtl/corrected/cap_nb_part_03.svh')
+          text = path.read_text()
+          old = 'for (k=0;k<=K;k=k+1) info_prefix[k]<=0;'
+          new = 'for (k=0;k<=K;k=k+1) info_prefix[k]=0;'
+          if text.count(old) != 1:
+              raise SystemExit('expected one info_prefix reset loop')
+          path.write_text(text.replace(old, new))
+          PY
       - name: Build paired RTL simulator
         run: |
           verilator --cc --exe --build -j 2 -O3 -Wno-fatal \
