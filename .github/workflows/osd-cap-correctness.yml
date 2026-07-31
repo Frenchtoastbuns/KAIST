@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - osd-cap-correct-nonblocking-20260731
+  pull_request:
+    branches:
+      - master
   workflow_dispatch:
 
 jobs:
