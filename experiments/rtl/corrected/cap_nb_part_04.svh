@@ -181,7 +181,7 @@
                         score_in_valid[0]<=1; score_in_mask[0]<=tmp_mask;
                         score_in_states[0]<=tmp_states; score_in_information[0]<=tmp_info;
                         task_we<=1; task_waddr<=task_count[TASK_AW-1:0];
-                        task_wdata<={tmp_mask,gen_j+1,tmp_info,tmp_states};
+                        task_wdata<={tmp_mask,(gen_j+7'd1),tmp_info,tmp_states};
                         task_count<=task_count+1;
                         if (gen_j==K-1) begin
                             if (gen_i==K-2) d_state<=D_RUN;
