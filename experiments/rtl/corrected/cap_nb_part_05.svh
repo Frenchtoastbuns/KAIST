@@ -14,7 +14,14 @@
                             ctx_next[pop_context]<=task_rdata[TASK_W-65 -: 7];
                             ctx_info[pop_context]<=task_rdata[METRIC_W+63 -: METRIC_W];
                             ctx_states[pop_context]<=task_rdata[63:0];
-                            ctx_state[pop_context]<=C_BOUND2_REQ;
+                            // A pair ending at rank K-1 has no order-3 or
+                            // order-4 descendants.  Do not start a zero-row
+                            // bound query, which would otherwise leave
+                            // q_active asserted forever.
+                            if (task_rdata[TASK_W-65 -: 7] >= K)
+                                ctx_state[pop_context]<=C_IDLE;
+                            else
+                                ctx_state[pop_context]<=C_BOUND2_REQ;
                             pop_pending<=0;
                         end
 
@@ -76,6 +83,13 @@
                                 end
                             end
                             q_count<=qfill;
+                            if (qfill==0) begin
+                                q_active<=0;
+                                q_result_valid<=1;
+                                q_result_pass<=0;
+                                q_result_context<=grant_ctx;
+                                q_result_depth3<=ctx_state[grant_ctx]==C_BOUND3_REQ;
+                            end
                         end
 
                         if (q_result_valid && !q_debug_owner) begin
