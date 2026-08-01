@@ -7,6 +7,12 @@ on:
     paths:
       - 'experiments/rtl/corrected/canonical_reference/**'
       - '.github/workflows/osd-canonical-diagnose.yml'
+  pull_request:
+    branches:
+      - master
+    paths:
+      - 'experiments/rtl/corrected/canonical_reference/**'
+      - '.github/workflows/osd-canonical-diagnose.yml'
   workflow_dispatch:
 
 jobs:
