@@ -12,6 +12,8 @@
 #include <stdexcept>
 #include <string>
 #include <type_traits>
+#include <unordered_map>
+#include <utility>
 
 namespace {
 constexpr int K=64, GROUPS=13, STATES=32;
@@ -48,3 +50,6 @@ struct Frame {
     uint16_t reference_metric=0;
     uint64_t reference_mask=0;
     uint8_t reference_tie=0;
+    uint64_t payload_checksum=0;
+};
+
