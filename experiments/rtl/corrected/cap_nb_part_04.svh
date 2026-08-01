@@ -163,7 +163,7 @@
                 best_tied<=seed_tie_latched;
                 score_issues<=0; bound_row_cycles<=0; context_wait_cycles<=0;
                 max_task_occupancy<=0; max_bound_waiters<=0;
-                task_count<=0; task_head<=0; pop_pending<=0;
+                task_count<=0; task_head<=0; pop_pending<=0; pop_phase<=0;
                 gen_i<=0; gen_j<=1;
                 for (lane=0;lane<CONTEXTS;lane=lane+1) begin
                     ctx_state[lane]<=C_IDLE;
@@ -199,7 +199,9 @@
                         task_wdata<={tmp_mask,(gen_j+7'd1),tmp_info,tmp_states};
                         task_count<=task_count+1;
                         if (gen_j==K-1) begin
-                            if (gen_i==K-2) d_state<=D_RUN;
-                            else begin gen_i<=gen_i+1; gen_j<=gen_i+2; end
+                            if (gen_i==K-2) begin
+                                pop_phase<=0;
+                                d_state<=D_RUN;
+                            end else begin gen_i<=gen_i+1; gen_j<=gen_i+2; end
                         end else gen_j<=gen_j+1;
                     end
