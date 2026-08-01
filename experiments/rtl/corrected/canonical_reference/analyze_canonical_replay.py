@@ -2,8 +2,9 @@
 import argparse,csv,glob,json,math,statistics
 from pathlib import Path
 
-NORMAL={'estimated_lcs':34926,'luts':39096,'ffs':15471,'bram18eq':329,'dsp48':3}
-S45={'estimated_lcs':38480,'luts':43970,'ffs':15786,'bram18eq':251,'dsp48':3}
+# Fresh post-FIFO-fix Xilinx-7 synthesis counts from run 30691594871.
+NORMAL={'estimated_lcs':34944,'luts':39124,'ffs':15473,'bram18eq':329,'dsp48':3}
+S45={'estimated_lcs':38584,'luts':44070,'ffs':15788,'bram18eq':251,'dsp48':3}
 
 def q(values,p):
     v=sorted(values)
