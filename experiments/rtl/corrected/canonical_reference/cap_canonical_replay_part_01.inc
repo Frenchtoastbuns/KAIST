@@ -1,6 +1,3 @@
-    uint64_t payload_checksum=0;
-};
-
 uint64_t fnv_byte(uint64_t h,uint8_t v){return (h^v)*FNV_PRIME;}
 template<class T> void hash_le(uint64_t& h,T value){
     using U=typename std::make_unsigned<T>::type; U u=static_cast<U>(value);
@@ -39,6 +36,8 @@ Frame read_frame(std::istream& in,const Header& h,uint64_t index){
 }
 unsigned popcount4(uint8_t v){return unsigned(v&1U)+unsigned((v>>1)&1U)+unsigned((v>>2)&1U)+unsigned((v>>3)&1U);}
 uint64_t parse_u64(const char* text){char* end=nullptr;auto v=std::strtoull(text,&end,0);if(end==text||*end!='\0')throw std::runtime_error("invalid integer");return uint64_t(v);}
+uint16_t metric_from_state(const Frame& f,uint64_t states,uint16_t information){uint32_t value=information;for(int g=0;g<GROUPS;++g){unsigned state=g==12?unsigned((states>>60)&15ULL):unsigned((states>>(5*g))&31ULL);value+=f.phi[g][state];}return uint16_t(value);}
+uint16_t metric_from_mask(const Frame& f,uint64_t mask){uint64_t states=f.base_states;uint16_t information=0;for(int rank=0;rank<K;++rank)if((mask>>rank)&1ULL){information=uint16_t(information+f.info[rank]);for(int g=0;g<12;++g)states^=uint64_t(f.rows[g][rank])<<(5*g);states^=uint64_t(f.rows[12][rank]&15U)<<60;}return metric_from_state(f,states,information);}
 
 class Simulator {
 public:
@@ -48,3 +47,9 @@ public:
         uint32_t normal_bound=0,s45_bound=0,normal_wait=0,s45_wait=0;
         uint32_t normal_fifo_full=0,s45_fifo_full=0,normal_fifo_empty=0,s45_fifo_empty=0;
         uint32_t normal_b_n=0,normal_b_r=0,normal_b_exp=0,normal_b_tri=0,normal_b_prefix=0;
+        uint32_t s45_b_n=0,s45_b_r=0,s45_b_exp=0,s45_b_tri=0,s45_b_prefix=0;
+        uint16_t normal_metric=0,s45_metric=0;uint64_t normal_mask=0,s45_mask=0;bool normal_tie=false,s45_tie=false;
+        uint16_t normal_max_fifo=0,s45_max_fifo=0;uint8_t normal_max_waiters=0,s45_max_waiters=0;
+        bool normal_issue_tuple_found=false;uint64_t normal_issue_tuple_states=0;uint16_t normal_issue_tuple_info=0;
+        uint16_t normal_issue_tuple_metric=0,normal_mask_metric=0;
+    };
