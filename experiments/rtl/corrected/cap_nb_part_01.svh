@@ -112,8 +112,9 @@
     endfunction
 
     // ------------------------------------------------------------------
-    // DP memories.  Each parity group is an independent bank, so one query
-    // reads all 13 group costs in parallel.
+    // DP memories.  Only the memories owned by the selected architecture are
+    // elaborated.  Debug observation cannot retain an unused compact/right
+    // table in the normal top or an unused normal table in the compact top.
     // ------------------------------------------------------------------
     wire [9:0] normal_a_q [0:GROUPS-1];
     wire [9:0] normal_b_q [0:GROUPS-1];
@@ -151,32 +152,35 @@
 
     genvar mg;
     generate
-        for (mg=0; mg<GROUPS; mg=mg+1) begin: g_normal_mem
-            cap_dp_tdp_ram #(.DEPTH(NORMAL_DEPTH),.ADDR_W(NORMAL_AW),.DATA_W(10)) mem (
-                .clk(clk),
-                .a_en(normal_a_en[mg]),.a_we(normal_a_we[mg]),
-                .a_addr(normal_a_addr[mg]),.a_wdata(normal_a_wdata[mg]),.a_rdata(normal_a_q[mg]),
-                .b_en(normal_b_en[mg]),.b_we(normal_b_we[mg]),
-                .b_addr(normal_b_addr[mg]),.b_wdata(normal_b_wdata[mg]),.b_rdata(normal_b_q[mg])
-            );
-        end
-        for (mg=0; mg<GROUPS; mg=mg+1) begin: g_right_mem
-            cap_dp_tdp_ram #(.DEPTH(RIGHT_DEPTH),.ADDR_W(RIGHT_AW),.DATA_W(10)) mem (
-                .clk(clk),
-                .a_en(right_a_en[mg]),.a_we(right_a_we[mg]),
-                .a_addr(right_a_addr[mg]),.a_wdata(right_a_wdata[mg]),.a_rdata(right_a_q[mg]),
-                .b_en(right_b_en[mg]),.b_we(right_b_we[mg]),
-                .b_addr(right_b_addr[mg]),.b_wdata(right_b_wdata[mg]),.b_rdata(right_b_q[mg])
-            );
-        end
-        for (mg=0; mg<GROUPS; mg=mg+1) begin: g_compact_mem
-            cap_dp_tdp_ram #(.DEPTH(COMPACT_DEPTH),.ADDR_W(COMPACT_AW),.DATA_W(10)) mem (
-                .clk(clk),
-                .a_en(compact_a_en[mg]),.a_we(compact_a_we[mg]),
-                .a_addr(compact_a_addr[mg]),.a_wdata(compact_a_wdata[mg]),.a_rdata(compact_a_q[mg]),
-                .b_en(compact_b_en[mg]),.b_we(compact_b_we[mg]),
-                .b_addr(compact_b_addr[mg]),.b_wdata(compact_b_wdata[mg]),.b_rdata(compact_b_q[mg])
-            );
+        if (!COMPACT) begin: g_normal_architecture
+            for (mg=0; mg<GROUPS; mg=mg+1) begin: g_normal_mem
+                cap_dp_tdp_ram #(.DEPTH(NORMAL_DEPTH),.ADDR_W(NORMAL_AW),.DATA_W(10)) mem (
+                    .clk(clk),
+                    .a_en(normal_a_en[mg]),.a_we(normal_a_we[mg]),
+                    .a_addr(normal_a_addr[mg]),.a_wdata(normal_a_wdata[mg]),.a_rdata(normal_a_q[mg]),
+                    .b_en(normal_b_en[mg]),.b_we(normal_b_we[mg]),
+                    .b_addr(normal_b_addr[mg]),.b_wdata(normal_b_wdata[mg]),.b_rdata(normal_b_q[mg])
+                );
+            end
+        end else begin: g_compact_architecture
+            for (mg=0; mg<GROUPS; mg=mg+1) begin: g_right_mem
+                cap_dp_tdp_ram #(.DEPTH(RIGHT_DEPTH),.ADDR_W(RIGHT_AW),.DATA_W(10)) mem (
+                    .clk(clk),
+                    .a_en(right_a_en[mg]),.a_we(right_a_we[mg]),
+                    .a_addr(right_a_addr[mg]),.a_wdata(right_a_wdata[mg]),.a_rdata(right_a_q[mg]),
+                    .b_en(right_b_en[mg]),.b_we(right_b_we[mg]),
+                    .b_addr(right_b_addr[mg]),.b_wdata(right_b_wdata[mg]),.b_rdata(right_b_q[mg])
+                );
+            end
+            for (mg=0; mg<GROUPS; mg=mg+1) begin: g_compact_mem
+                cap_dp_tdp_ram #(.DEPTH(COMPACT_DEPTH),.ADDR_W(COMPACT_AW),.DATA_W(10)) mem (
+                    .clk(clk),
+                    .a_en(compact_a_en[mg]),.a_we(compact_a_we[mg]),
+                    .a_addr(compact_a_addr[mg]),.a_wdata(compact_a_wdata[mg]),.a_rdata(compact_a_q[mg]),
+                    .b_en(compact_b_en[mg]),.b_we(compact_b_we[mg]),
+                    .b_addr(compact_b_addr[mg]),.b_wdata(compact_b_wdata[mg]),.b_rdata(compact_b_q[mg])
+                );
+            end
         end
     endgenerate
 
