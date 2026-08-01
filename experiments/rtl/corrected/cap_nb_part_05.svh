@@ -1,15 +1,35 @@
                     D_RUN: begin
-                        // One shared synchronous FIFO pop per cycle; whichever
-                        // context is idle first steals the next prefix task.
-                        if (!pop_pending && task_head<task_count) begin
-                            for (lane=0;lane<CONTEXTS;lane=lane+1) begin
-                                if (!pop_pending && ctx_state[lane]==C_IDLE) begin
-                                    task_re<=1; task_raddr<=task_head[TASK_AW-1:0];
-                                    task_head<=task_head+1; pop_pending<=1;
-                                    pop_context<=lane[1:0];
-                                end
+                        // The task RAM has a registered read port.  A pop
+                        // therefore has three phases: launch the request,
+                        // wait for the RAM response edge, then consume the
+                        // stable task_rdata.  The previous one-cycle pending
+                        // flag consumed the old RAM word and could pair a TEP
+                        // mask with another task's parity state/information.
+                        if (pop_phase==0 && task_head<task_count) begin
+                            // Fixed-priority selection guarantees exactly one
+                            // idle context owns each shared FIFO response.
+                            if (ctx_state[0]==C_IDLE) begin
+                                task_re<=1; task_raddr<=task_head[TASK_AW-1:0];
+                                task_head<=task_head+1; pop_phase<=1;
+                                pop_context<=0;
+                            end else if (ctx_state[1]==C_IDLE) begin
+                                task_re<=1; task_raddr<=task_head[TASK_AW-1:0];
+                                task_head<=task_head+1; pop_phase<=1;
+                                pop_context<=1;
+                            end else if (ctx_state[2]==C_IDLE) begin
+                                task_re<=1; task_raddr<=task_head[TASK_AW-1:0];
+                                task_head<=task_head+1; pop_phase<=1;
+                                pop_context<=2;
+                            end else if (ctx_state[3]==C_IDLE) begin
+                                task_re<=1; task_raddr<=task_head[TASK_AW-1:0];
+                                task_head<=task_head+1; pop_phase<=1;
+                                pop_context<=3;
                             end
-                        end else if (pop_pending) begin
+                        end else if (pop_phase==1) begin
+                            // task_mem captures the registered request on this
+                            // edge; consume its rdata on the following edge.
+                            pop_phase<=2;
+                        end else if (pop_phase==2) begin
                             ctx_mask[pop_context]<=task_rdata[TASK_W-1 -: 64];
                             ctx_next[pop_context]<=task_rdata[TASK_W-65 -: 7];
                             ctx_info[pop_context]<=task_rdata[METRIC_W+63 -: METRIC_W];
@@ -22,7 +42,7 @@
                                 ctx_state[pop_context]<=C_IDLE;
                             else
                                 ctx_state[pop_context]<=C_BOUND2_REQ;
-                            pop_pending<=0;
+                            pop_phase<=0;
                         end
 
                         // Query arbiter grant.
@@ -136,7 +156,7 @@
                             end
                         end
 
-                        if (task_head==task_count && !pop_pending && all_contexts_idle &&
+                        if (task_head==task_count && pop_phase==0 && all_contexts_idle &&
                             !q_active) d_state<=D_DRAIN;
                     end
                     D_DRAIN: begin
