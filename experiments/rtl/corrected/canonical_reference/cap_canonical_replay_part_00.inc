@@ -24,8 +24,9 @@ constexpr uint64_t FNV_OFFSET=1469598103934665603ULL;
 constexpr uint64_t FNV_PRIME=1099511628211ULL;
 constexpr uint32_t EXPECTED_HEADER_BYTES=96;
 constexpr uint32_t EXPECTED_RECORD_BYTES=1778;
-constexpr uint64_t NORMAL_LUTS=39096ULL;
-constexpr uint64_t S45_LUTS=43970ULL;
+// Fresh post-FIFO-fix Xilinx-7 synthesis counts from run 30691594871.
+constexpr uint64_t NORMAL_LUTS=39124ULL;
+constexpr uint64_t S45_LUTS=44070ULL;
 
 using Rows=std::array<std::array<uint8_t,K>,GROUPS>;
 using Phi=std::array<std::array<uint16_t,STATES>,GROUPS>;
