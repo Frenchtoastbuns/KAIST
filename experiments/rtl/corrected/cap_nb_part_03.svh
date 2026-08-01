@@ -94,7 +94,9 @@
             pop_pending<=0; d_state<=D_IDLE; gen_i<=0; gen_j<=1;
             base_states_latched<=0; seed_metric_latched<=0;
             seed_mask_latched<=0; seed_tie_latched<=0;
-            for (k=0;k<=K;k=k+1) info_prefix[k]<=0;
+            // Blocking assignment is committed source so Verilator and
+            // synthesis consume identical RTL; no workflow rewrite is needed.
+            for (k=0;k<=K;k=k+1) info_prefix[k]=0;
             for (lane=0;lane<CONTEXTS;lane=lane+1) begin
                 ctx_state[lane]<=C_IDLE;
                 score_in_valid[lane]<=0;
