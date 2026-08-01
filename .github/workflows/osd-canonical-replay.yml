@@ -6,12 +6,16 @@ on:
       - osd-nonblocking-corrected-20260731
     paths:
       - 'experiments/rtl/corrected/canonical_reference/**'
+      - 'experiments/rtl/corrected/cap_nb_part_*.svh'
+      - 'experiments/rtl/corrected/cap_nonblocking_corrected_decoder.sv'
       - '.github/workflows/osd-canonical-replay.yml'
   pull_request:
     branches:
       - master
     paths:
       - 'experiments/rtl/corrected/canonical_reference/**'
+      - 'experiments/rtl/corrected/cap_nb_part_*.svh'
+      - 'experiments/rtl/corrected/cap_nonblocking_corrected_decoder.sv'
       - '.github/workflows/osd-canonical-replay.yml'
   workflow_dispatch:
 
