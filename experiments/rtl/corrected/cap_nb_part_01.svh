@@ -112,9 +112,9 @@
     endfunction
 
     // ------------------------------------------------------------------
-    // DP memories.  Only the memories owned by the selected architecture are
-    // elaborated.  Debug observation cannot retain an unused compact/right
-    // table in the normal top or an unused normal table in the compact top.
+    // DP memories. Only the memories owned by the selected architecture are
+    // elaborated. Unelaborated read buses are tied off so structural checks
+    // and parameter pruning see no undriven signals.
     // ------------------------------------------------------------------
     wire [9:0] normal_a_q [0:GROUPS-1];
     wire [9:0] normal_b_q [0:GROUPS-1];
@@ -161,6 +161,10 @@
                     .b_en(normal_b_en[mg]),.b_we(normal_b_we[mg]),
                     .b_addr(normal_b_addr[mg]),.b_wdata(normal_b_wdata[mg]),.b_rdata(normal_b_q[mg])
                 );
+                assign right_a_q[mg] = 10'b0;
+                assign right_b_q[mg] = 10'b0;
+                assign compact_a_q[mg] = 10'b0;
+                assign compact_b_q[mg] = 10'b0;
             end
         end else begin: g_compact_architecture
             for (mg=0; mg<GROUPS; mg=mg+1) begin: g_right_mem
@@ -171,6 +175,8 @@
                     .b_en(right_b_en[mg]),.b_we(right_b_we[mg]),
                     .b_addr(right_b_addr[mg]),.b_wdata(right_b_wdata[mg]),.b_rdata(right_b_q[mg])
                 );
+                assign normal_a_q[mg] = 10'b0;
+                assign normal_b_q[mg] = 10'b0;
             end
             for (mg=0; mg<GROUPS; mg=mg+1) begin: g_compact_mem
                 cap_dp_tdp_ram #(.DEPTH(COMPACT_DEPTH),.ADDR_W(COMPACT_AW),.DATA_W(10)) mem (
