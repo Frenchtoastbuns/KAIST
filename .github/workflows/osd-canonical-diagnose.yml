@@ -29,7 +29,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y verilator g++ make
-      - name: Build frozen trace exporter
+      - name: Build and verify frozen trace exporter
         run: |
           g++ -std=c++17 -O3 \
             -I experiments/rtl/corrected/canonical_reference \
@@ -39,20 +39,9 @@ jobs:
             --output /tmp/canonical_cap_trace.bin \
             --manifest /tmp/canonical_cap_trace_manifest.json \
             | tee /tmp/export.log
-          grep -q 'stream_checksum=11508365490867720138' /tmp/export.log
-      - name: Apply Verilator-compatible reset spelling
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          path = Path('experiments/rtl/corrected/cap_nb_part_03.svh')
-          text = path.read_text()
-          old = 'for (k=0;k<=K;k=k+1) info_prefix[k]<=0;'
-          new = 'for (k=0;k<=K;k=k+1) info_prefix[k]=0;'
-          if text.count(old) != 1:
-              raise SystemExit('expected one info_prefix reset loop')
-          path.write_text(text.replace(old, new))
-          PY
-      - name: Build diagnostic replay simulator
+          grep -q 'CANONICAL_TRACE_PASS frames=1000 seed=5928218492399464753 stream_checksum=11508365490867720138 generator_checksum=15049493467287215415 trace_checksum=332897943003122562 tie_frames=8 record_bytes=1778' /tmp/export.log
+          echo 'c3cd084c4aa8c457f87d0d72efb8c81c8fc8385b635be7b91117c1a881ae2f5a  /tmp/canonical_cap_trace.bin' | sha256sum -c -
+      - name: Build diagnostic replay simulator from committed RTL
         run: |
           verilator --cc --exe --build -j 2 -O3 -Wno-fatal \
             --top-module cap_canonical_replay_pair_top \
