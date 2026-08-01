@@ -3,8 +3,8 @@
 // Production residual-order-two normal CAP certification core.
 //
 // The search scheduler scores every order-0, order-1 and order-2 candidate
-// before certification.  Consequently, production bound requests only need
-// residual budgets one and two and begin at suffix rank two or later.  This
+// before certification. Consequently, production bound requests only need
+// residual budgets one and two and begin at suffix rank two or later. This
 // core therefore stores only F_g(s,w,u) for s=2..64 and w in {1,2}.
 // Residual weight zero is evaluated directly as phi_g(u).
 //
@@ -198,10 +198,6 @@ module cap_r2_normal_core #(
         end
     endfunction
 
-    // ------------------------------------------------------------------
-    // Residual-order-two DP memory.  There are no compact/right memories in
-    // this production core.
-    // ------------------------------------------------------------------
     wire [9:0] r2_a_q [0:GROUPS-1];
     wire [9:0] r2_b_q [0:GROUPS-1];
     reg r2_a_en [0:GROUPS-1];
@@ -226,7 +222,6 @@ module cap_r2_normal_core #(
         end
     endgenerate
 
-    // Builder states.  Expected total is 64 + 2*62*2*32 + 65 = 8065 cycles.
     localparam [2:0] B_IDLE=0, B_INIT=1, B_READ=2, B_WRITE=3, B_PREFIX=4;
     reg [2:0] b_state;
     reg [6:0] b_suffix;
@@ -234,7 +229,6 @@ module cap_r2_normal_core #(
     reg [4:0] b_value_state;
     reg [6:0] b_prefix_index;
 
-    // Single blocking query engine retained for the first R2 experiment.
     reg q_active;
     reg [1:0] q_context;
     reg q_context_depth3;
@@ -261,7 +255,6 @@ module cap_r2_normal_core #(
     reg [METRIC_W+4:0] query_total;
     reg query_pass_now;
 
-    // Four five-cycle scorer lanes.
     reg score_in_valid [0:CONTEXTS-1];
     reg [63:0] score_in_mask [0:CONTEXTS-1];
     reg [63:0] score_in_states [0:CONTEXTS-1];
@@ -275,7 +268,6 @@ module cap_r2_normal_core #(
     integer sl;
     integer sp;
 
-    // Compressed rank-pair FIFO.
     reg task_we;
     reg [TASK_AW-1:0] task_waddr;
     reg [11:0] task_wdata;
@@ -320,7 +312,6 @@ module cap_r2_normal_core #(
     reg [5:0] tmp_rank_i;
     reg [5:0] tmp_rank_j;
 
-    // Combinational memory arbitration and reductions.
     integer cg;
     always @* begin
         for (cg=0; cg<GROUPS; cg=cg+1) begin
@@ -412,8 +403,8 @@ module cap_r2_normal_core #(
             d_state<=D_IDLE; gen_i<=0; gen_j<=1;
             base_states_latched<=0; seed_metric_latched<=0;
             seed_mask_latched<=0; seed_tie_latched<=0;
-            // Blocking assignment is intentionally committed source so
-            // Verilator and synthesis consume identical RTL.
+            // Blocking assignment is committed source so simulation and
+            // synthesis consume identical RTL.
             for (k=0;k<=K;k=k+1) info_prefix[k]=0;
             for (lane=0;lane<CONTEXTS;lane=lane+1) begin
                 ctx_state[lane]<=C_IDLE;
@@ -481,7 +472,6 @@ module cap_r2_normal_core #(
                 endcase
             end
 
-            // Query engine: evaluate the previous row while issuing the next.
             q_issue_now = q_active && (q_issue_index < q_count);
             if (q_eval_valid) begin
                 query_total=q_eval_information;
@@ -511,7 +501,6 @@ module cap_r2_normal_core #(
                 q_issue_index<=q_issue_index+1;
             end
 
-            // Score pipeline.
             for (lane=0;lane<CONTEXTS;lane=lane+1) begin
                 score_v[0][lane]<=score_in_valid[lane];
                 score_m[0][lane]<=score_in_mask[lane];
@@ -642,7 +631,7 @@ module cap_r2_normal_core #(
                                 if (qi<=(ctx_state[grant_ctx]==C_BOUND3_REQ?1:2) &&
                                     (ctx_state[grant_ctx]==C_BOUND3_REQ?
                                         ctx_leaf[grant_ctx]:ctx_next[grant_ctx])+qi<=K) begin
-                                    q_weight_rows[qfill]<=qi[1:0];
+                                    q_weight_rows[qfill]<=qi;
                                     q_info_rows[qfill]<=(ctx_state[grant_ctx]==C_BOUND3_REQ?
                                         ctx_d3_info[grant_ctx]:ctx_info[grant_ctx])+
                                         (info_prefix[(ctx_state[grant_ctx]==C_BOUND3_REQ?
@@ -652,7 +641,7 @@ module cap_r2_normal_core #(
                                     qfill=qfill+1;
                                 end
                             end
-                            q_count<=qfill[1:0];
+                            q_count<=qfill;
                             if (qfill==0) begin
                                 q_active<=0; q_result_valid<=1; q_result_pass<=0;
                                 q_result_context<=grant_ctx;
