@@ -6,17 +6,21 @@ on:
       - osd-nonblocking-corrected-20260731
     paths:
       - 'experiments/rtl/corrected/canonical_reference/**'
+      - 'experiments/rtl/corrected/cap_nb_part_*.svh'
+      - 'experiments/rtl/corrected/cap_nonblocking_corrected_decoder.sv'
       - '.github/workflows/osd-canonical-diagnose.yml'
   pull_request:
     branches:
       - master
     paths:
       - 'experiments/rtl/corrected/canonical_reference/**'
+      - 'experiments/rtl/corrected/cap_nb_part_*.svh'
+      - 'experiments/rtl/corrected/cap_nonblocking_corrected_decoder.sv'
       - '.github/workflows/osd-canonical-diagnose.yml'
   workflow_dispatch:
 
 jobs:
-  diagnose-frame-400:
+  verify-frame-400:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -59,17 +63,13 @@ jobs:
             "$GITHUB_WORKSPACE/experiments/rtl/corrected/canonical_reference/cap_canonical_replay_verilator.cc" \
             --Mdir /tmp/canonical_diag_obj \
             -CFLAGS "-O3 -std=c++17"
-      - name: Capture frame 400 issue tuple
+      - name: Verify frame 400 correction
         run: |
           mkdir -p diagnostic
-          set +e
           /tmp/canonical_diag_obj/Vcap_canonical_replay_pair_top \
             --trace /tmp/canonical_cap_trace.bin --start 400 --count 1 --diagnose \
             --csv diagnostic/frame400.csv 2>&1 | tee diagnostic/frame400.log
-          rc=${PIPESTATUS[0]}
-          set -e
-          test "$rc" -ne 0
-          grep -q '^CANONICAL_DIAG frame=400 ' diagnostic/frame400.log
+          grep -q '^CANONICAL_REPLAY_PASS start=400 count=1 errors=0' diagnostic/frame400.log
       - name: Upload diagnostic evidence
         uses: actions/upload-artifact@v4
         with:
