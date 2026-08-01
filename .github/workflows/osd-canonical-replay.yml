@@ -40,10 +40,12 @@ jobs:
             --output experiments/results/canonical_trace/canonical_cap_trace.bin \
             --manifest experiments/results/canonical_trace/canonical_cap_trace_manifest.json \
             | tee experiments/results/canonical_trace/export.log
-          grep -q 'CANONICAL_TRACE_PASS frames=1000 seed=5928218492399464753 stream_checksum=11508365490867720138' \
+          grep -q 'CANONICAL_TRACE_PASS frames=1000 seed=5928218492399464753 stream_checksum=11508365490867720138 generator_checksum=15049493467287215415 trace_checksum=332897943003122562 tie_frames=8 record_bytes=1778' \
             experiments/results/canonical_trace/export.log
+          echo 'c3cd084c4aa8c457f87d0d72efb8c81c8fc8385b635be7b91117c1a881ae2f5a  experiments/results/canonical_trace/canonical_cap_trace.bin' \
+            | sha256sum -c -
           sha256sum experiments/results/canonical_trace/canonical_cap_trace.bin \
-            | tee experiments/results/canonical_trace/canonical_cap_trace.sha256
+            > experiments/results/canonical_trace/canonical_cap_trace.sha256
       - name: Upload canonical trace
         uses: actions/upload-artifact@v4
         with:
@@ -60,19 +62,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y verilator g++ make
-      - name: Apply Verilator-compatible reset spelling
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          path = Path('experiments/rtl/corrected/cap_nb_part_03.svh')
-          text = path.read_text()
-          old = 'for (k=0;k<=K;k=k+1) info_prefix[k]<=0;'
-          new = 'for (k=0;k<=K;k=k+1) info_prefix[k]=0;'
-          if text.count(old) != 1:
-              raise SystemExit('expected one info_prefix reset loop')
-          path.write_text(text.replace(old, new))
-          PY
-      - name: Build deterministic canonical replay simulator
+      - name: Build deterministic canonical replay simulator from committed RTL
         run: |
           verilator --cc --exe --build -j 2 -O3 -Wno-fatal \
             --top-module cap_canonical_replay_pair_top \
