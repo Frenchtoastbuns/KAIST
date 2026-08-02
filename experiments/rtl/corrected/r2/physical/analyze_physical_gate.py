@@ -62,13 +62,18 @@ def architecture(route_path: Path, csv_path: Path, power_path: Path) -> dict:
     build = [float(row["build_cycles"]) for row in rows]
     decode = [float(row["decode_cycles"]) for row in rows]
     fmax_mhz = float(route["estimated_fmax_mhz"])
+    target_period_ns = float(route["target_period_ns"])
     dynamic_w = parse_dynamic_power(power_path)
     mean_cycles = mean(cycles)
     p99_cycles = percentile(cycles, 0.99)
     frames_per_second = fmax_mhz * 1.0e6 / mean_cycles
     mean_latency_us = mean_cycles / fmax_mhz
     p99_latency_us = p99_cycles / fmax_mhz
-    energy_uj = dynamic_w / frames_per_second * 1.0e6
+    # SAIF power is reported at the identical constrained clock retained in
+    # each routed checkpoint. Compare energy at that common feasible clock;
+    # do not mix common-clock power with each design's estimated Fmax.
+    common_clock_latency_us = mean_cycles * target_period_ns / 1000.0
+    energy_uj = dynamic_w * common_clock_latency_us
     return {
         "route": route,
         "mismatch_frames": 0,
@@ -80,11 +85,12 @@ def architecture(route_path: Path, csv_path: Path, power_path: Path) -> dict:
         "p99_total_cycles": p99_cycles,
         "max_total_cycles": max(cycles),
         "fmax_mhz": fmax_mhz,
-        "mean_latency_us": mean_latency_us,
-        "p99_latency_us": p99_latency_us,
-        "frames_per_second": frames_per_second,
-        "dynamic_power_w": dynamic_w,
-        "dynamic_energy_per_frame_uj": energy_uj,
+        "mean_latency_us_at_fmax": mean_latency_us,
+        "p99_latency_us_at_fmax": p99_latency_us,
+        "frames_per_second_at_fmax": frames_per_second,
+        "common_clock_mean_latency_us": common_clock_latency_us,
+        "dynamic_power_w_at_common_clock": dynamic_w,
+        "dynamic_energy_per_frame_uj_at_common_clock": energy_uj,
     }
 
 
@@ -113,9 +119,9 @@ def main() -> None:
     if b_route["target_period_ns"] != s_route["target_period_ns"] or b_route["clock_uncertainty_ns"] != s_route["clock_uncertainty_ns"]:
         raise SystemExit("baseline and split did not use identical clock constraints")
 
-    throughput_gain = split["frames_per_second"] / baseline["frames_per_second"] - 1.0
-    p99_reduction = 1.0 - split["p99_latency_us"] / baseline["p99_latency_us"]
-    energy_reduction = 1.0 - split["dynamic_energy_per_frame_uj"] / baseline["dynamic_energy_per_frame_uj"]
+    throughput_gain = split["frames_per_second_at_fmax"] / baseline["frames_per_second_at_fmax"] - 1.0
+    p99_reduction = 1.0 - split["p99_latency_us_at_fmax"] / baseline["p99_latency_us_at_fmax"]
+    energy_reduction = 1.0 - split["dynamic_energy_per_frame_uj_at_common_clock"] / baseline["dynamic_energy_per_frame_uj_at_common_clock"]
     lut_growth = float(s_route["routed_luts"]) / float(b_route["routed_luts"]) - 1.0
     fmax_ratio = split["fmax_mhz"] / baseline["fmax_mhz"]
 
@@ -140,7 +146,7 @@ def main() -> None:
         "comparisons": {
             "throughput_gain_fraction": throughput_gain,
             "p99_latency_reduction_fraction": p99_reduction,
-            "dynamic_energy_reduction_fraction": energy_reduction,
+            "dynamic_energy_reduction_fraction_at_common_clock": energy_reduction,
             "routed_lut_growth_fraction": lut_growth,
             "fmax_ratio": fmax_ratio,
         },
@@ -168,15 +174,15 @@ def main() -> None:
         f"| Routed FFs | {b_route['routed_ffs']} | {s_route['routed_ffs']} |",
         f"| BRAM18 equivalent | {b_route['bram18_equivalent']} | {s_route['bram18_equivalent']} |",
         f"| Mean total cycles | {baseline['mean_total_cycles']:.3f} | {split['mean_total_cycles']:.3f} |",
-        f"| Mean latency (us) | {baseline['mean_latency_us']:.3f} | {split['mean_latency_us']:.3f} |",
-        f"| p99 latency (us) | {baseline['p99_latency_us']:.3f} | {split['p99_latency_us']:.3f} |",
-        f"| Frames/s | {baseline['frames_per_second']:.3f} | {split['frames_per_second']:.3f} |",
-        f"| Dynamic power (W) | {baseline['dynamic_power_w']:.6f} | {split['dynamic_power_w']:.6f} |",
-        f"| Dynamic energy/frame (uJ) | {baseline['dynamic_energy_per_frame_uj']:.6f} | {split['dynamic_energy_per_frame_uj']:.6f} |",
+        f"| Mean latency at Fmax (us) | {baseline['mean_latency_us_at_fmax']:.3f} | {split['mean_latency_us_at_fmax']:.3f} |",
+        f"| p99 latency at Fmax (us) | {baseline['p99_latency_us_at_fmax']:.3f} | {split['p99_latency_us_at_fmax']:.3f} |",
+        f"| Frames/s at Fmax | {baseline['frames_per_second_at_fmax']:.3f} | {split['frames_per_second_at_fmax']:.3f} |",
+        f"| Dynamic power at common clock (W) | {baseline['dynamic_power_w_at_common_clock']:.6f} | {split['dynamic_power_w_at_common_clock']:.6f} |",
+        f"| Dynamic energy/frame at common clock (uJ) | {baseline['dynamic_energy_per_frame_uj_at_common_clock']:.6f} | {split['dynamic_energy_per_frame_uj_at_common_clock']:.6f} |",
         "",
         f"Throughput gain: **{throughput_gain*100:.3f}%**  ",
         f"p99 latency reduction: **{p99_reduction*100:.3f}%**  ",
-        f"Dynamic energy/frame reduction: **{energy_reduction*100:.3f}%**  ",
+        f"Dynamic energy/frame reduction at the common clock: **{energy_reduction*100:.3f}%**  ",
         f"Routed LUT growth: **{lut_growth*100:.3f}%**  ",
         f"Fmax ratio: **{fmax_ratio:.6f}**",
         "",
