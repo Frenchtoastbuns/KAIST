@@ -184,7 +184,7 @@ module cap_r2_post_route_tb;
                     cfg_phi_we = 1;
                     cfg_phi_group = group[3:0];
                     cfg_phi_state = state[4:0];
-                    cfg_phi_cost = read_u16(address)[9:0];
+                    cfg_phi_cost = read_u16(address);
                     address = address + 2;
                 end
             end
@@ -200,10 +200,10 @@ module cap_r2_post_route_tb;
             @(negedge clk); cfg_info_we = 0;
 
             cfg_base_states = read_u64(address); address = address + 8;
-            cfg_seed_best_metric = read_u16(address)[13:0]; address = address + 2;
+            cfg_seed_best_metric = read_u16(address); address = address + 2;
             cfg_seed_mask = read_u64(address); address = address + 8;
             cfg_seed_tie = trace_mem[address][0]; address = address + 1;
-            expected_metric = read_u16(address)[13:0]; address = address + 2;
+            expected_metric = read_u16(address); address = address + 2;
             expected_mask = read_u64(address); address = address + 8;
             expected_tie = trace_mem[address][0];
 
