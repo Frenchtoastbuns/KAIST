@@ -109,7 +109,7 @@ jobs:
       - name: Generate SAIF-annotated routed power report
         env:
           R2_ROUTED_DCP: ${{ github.workspace }}/experiments/results/r2_physical/${{ matrix.variant }}/routed.dcp
-          R2_SAIF: ${{ github.workspace }}/experiments/results/r2_physical/${{ matrix.variant }}/postroute_sim/activity_100.saif
+          R2_SAIF: ${{ github.workspace }}/experiments/results/r2_physical/${{ matrix.variant }}/postroute_sim/activity_1000.saif
           R2_OUT_DIR: ${{ github.workspace }}/experiments/results/r2_physical/${{ matrix.variant }}
         run: |
           vivado -mode batch -notrace \
