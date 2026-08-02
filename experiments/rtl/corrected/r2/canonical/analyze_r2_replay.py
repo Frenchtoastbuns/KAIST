@@ -41,7 +41,7 @@ def renamed_row(row):
     result = {}
     for key, value in row.items():
         if key.startswith("s45_"):
-            result["r2_" + key[4:]] = value
+            result["split_r2_" + key[4:]] = value
         else:
             result[key] = value
     return result
@@ -81,7 +81,7 @@ def main():
         "architectures": {},
     }
 
-    for label, prefix in (("baseline_normal", "normal"), ("r2_normal", "s45")):
+    for label, prefix in (("baseline_r2", "normal"), ("split_phase_r2", "s45")):
         build = integer(rows, f"{prefix}_build_cycles")
         decode = integer(rows, f"{prefix}_decode_cycles")
         total = integer(rows, f"{prefix}_total_cycles")
@@ -109,53 +109,67 @@ def main():
             },
         }
 
-    baseline = result["architectures"]["baseline_normal"]
-    r2 = result["architectures"]["r2_normal"]
+    baseline = result["architectures"]["baseline_r2"]
+    split = result["architectures"]["split_phase_r2"]
     baseline_total = baseline["total_cycles"]["mean"]
-    r2_total = r2["total_cycles"]["mean"]
+    split_total = split["total_cycles"]["mean"]
     hardest = sorted(rows, key=lambda row: int(row["normal_total_cycles"]), reverse=True)[:100]
     hard_baseline = statistics.fmean(int(row["normal_total_cycles"]) for row in hardest)
-    hard_r2 = statistics.fmean(int(row["s45_total_cycles"]) for row in hardest)
+    hard_split = statistics.fmean(int(row["s45_total_cycles"]) for row in hardest)
 
     result["comparison"] = {
-        "r2_over_baseline_total_cycle_ratio": r2_total / baseline_total,
-        "r2_total_cycle_change_percent": (r2_total / baseline_total - 1.0) * 100.0,
-        "r2_decode_cycle_change_percent": (
-            r2["decode_cycles"]["mean"] / baseline["decode_cycles"]["mean"] - 1.0
+        "split_over_baseline_total_cycle_ratio": split_total / baseline_total,
+        "split_total_cycle_change_percent": (split_total / baseline_total - 1.0) * 100.0,
+        "split_decode_cycle_change_percent": (
+            split["decode_cycles"]["mean"] / baseline["decode_cycles"]["mean"] - 1.0
         ) * 100.0,
-        "r2_build_cycle_change_percent": (
-            r2["build_cycles"]["mean"] / baseline["build_cycles"]["mean"] - 1.0
+        "split_build_cycle_change_percent": (
+            split["build_cycles"]["mean"] / baseline["build_cycles"]["mean"] - 1.0
         ) * 100.0,
-        "r2_frame_win_rate": sum(
+        "split_frame_win_rate": sum(
             int(row["s45_total_cycles"]) < int(row["normal_total_cycles"]) for row in rows
         ) / 1000.0,
         "hardest_10_percent": {
             "baseline_mean_total_cycles": hard_baseline,
-            "r2_mean_total_cycles": hard_r2,
-            "r2_change_percent": (hard_r2 / hard_baseline - 1.0) * 100.0,
+            "split_mean_total_cycles": hard_split,
+            "split_change_percent": (hard_split / hard_baseline - 1.0) * 100.0,
         },
     }
 
-    # This is the architectural invariant of the specialised builder.
-    if any(int(row["s45_build_cycles"]) != 8065 for row in rows):
-        raise SystemExit("R2 builder did not remain at the frozen 8,065-cycle schedule")
+    # The experiment changes only the query engine. Both sides must retain the
+    # frozen production R2 builder schedule.
+    if any(
+        int(row["normal_build_cycles"]) != 8065 or
+        int(row["s45_build_cycles"]) != 8065
+        for row in rows
+    ):
+        raise SystemExit("split-phase experiment changed the frozen 8,065-cycle R2 builder")
 
-    result["decision"] = "R2_CORRECT" if mismatch_frames == 0 else "R2_MISMATCH"
-    (out / "r2_replay_summary.json").write_text(
+    utilisation = split["scorer_utilisation_weighted"]
+    if split_total <= 125000 and utilisation >= 0.65:
+        decision = "SPLIT_PHASE_STRONG"
+    elif split_total <= 132000 and utilisation >= 0.65:
+        decision = "SPLIT_PHASE_PASS"
+    elif split_total <= 139500:
+        decision = "SPLIT_PHASE_MARGINAL"
+    else:
+        decision = "KILL_SPLIT_PHASE_UNDER_10_PERCENT_GAIN"
+    result["decision"] = decision
+    (out / "r2_split_phase_replay_summary.json").write_text(
         json.dumps(result, indent=2, sort_keys=True) + "\n"
     )
 
     lines = [
-        "# Residual-order-two normal CAP canonical replay",
+        "# Tagged split-phase R2 CAP canonical replay",
         "",
         f"**Decision:** `{result['decision']}`",
         "",
         f"- Frames: 1,000; mismatches: {mismatch_frames}; tie frames: {result['tie_frames']}",
-        f"- R2 total-cycle change: {result['comparison']['r2_total_cycle_change_percent']:+.3f}%",
-        f"- R2 decode-cycle change: {result['comparison']['r2_decode_cycle_change_percent']:+.3f}%",
-        f"- R2 frame win rate: {100.0 * result['comparison']['r2_frame_win_rate']:.1f}%",
+        f"- Split-phase total-cycle change: {result['comparison']['split_total_cycle_change_percent']:+.3f}%",
+        f"- Split-phase decode-cycle change: {result['comparison']['split_decode_cycle_change_percent']:+.3f}%",
+        f"- Split-phase frame win rate: {100.0 * result['comparison']['split_frame_win_rate']:.1f}%",
         "",
-        "| Metric | Baseline normal | R2 normal |",
+        "| Metric | Baseline R2 | Split-phase R2 |",
         "|---|---:|---:|",
     ]
     for label, key in (
@@ -164,22 +178,22 @@ def main():
         ("Total mean", "total_cycles"),
     ):
         lines.append(
-            f"| {label} | {baseline[key]['mean']:.3f} | {r2[key]['mean']:.3f} |"
+            f"| {label} | {baseline[key]['mean']:.3f} | {split[key]['mean']:.3f} |"
         )
     for label, percentile in (("Total p50", "p50"), ("Total p95", "p95"), ("Total p99", "p99")):
         lines.append(
-            f"| {label} | {baseline['total_cycles'][percentile]:.3f} | {r2['total_cycles'][percentile]:.3f} |"
+            f"| {label} | {baseline['total_cycles'][percentile]:.3f} | {split['total_cycles'][percentile]:.3f} |"
         )
     lines += [
         "",
-        f"- Weighted scorer utilisation: baseline {100.0 * baseline['scorer_utilisation_weighted']:.3f}%, R2 {100.0 * r2['scorer_utilisation_weighted']:.3f}%",
-        f"- Mean scoring issues: baseline {baseline['scoring_issues']['mean']:.3f}, R2 {r2['scoring_issues']['mean']:.3f}",
-        f"- Mean bound rows: baseline {baseline['bound_rows']['mean']:.3f}, R2 {r2['bound_rows']['mean']:.3f}",
-        f"- Hardest-10% total-cycle change: {result['comparison']['hardest_10_percent']['r2_change_percent']:+.3f}%",
+        f"- Weighted scorer utilisation: baseline {100.0 * baseline['scorer_utilisation_weighted']:.3f}%, split-phase {100.0 * split['scorer_utilisation_weighted']:.3f}%",
+        f"- Mean scoring issues: baseline {baseline['scoring_issues']['mean']:.3f}, split-phase {split['scoring_issues']['mean']:.3f}",
+        f"- Mean bound rows: baseline {baseline['bound_rows']['mean']:.3f}, split-phase {split['bound_rows']['mean']:.3f}",
+        f"- Hardest-10% total-cycle change: {result['comparison']['hardest_10_percent']['split_change_percent']:+.3f}%",
         "",
         "Per-frame results are preserved in `r2_replay_per_frame.csv`.",
     ]
-    (out / "r2_replay_summary.md").write_text("\n".join(lines) + "\n")
+    (out / "r2_split_phase_replay_summary.md").write_text("\n".join(lines) + "\n")
 
     print(json.dumps(result["comparison"], indent=2, sort_keys=True))
     print("R2_CANONICAL_REPLAY_AGGREGATE_PASS")

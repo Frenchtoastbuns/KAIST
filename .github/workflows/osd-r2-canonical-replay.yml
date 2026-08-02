@@ -64,14 +64,13 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y verilator g++ make
-      - name: Build baseline-versus-R2 replay simulator from committed RTL
+      - name: Build baseline-R2 versus split-phase-R2 simulator
         run: |
           verilator --cc --exe --build -j 2 -O3 -Wno-fatal \
             --top-module cap_canonical_replay_pair_top \
-            -Iexperiments/rtl/corrected \
             -Iexperiments/rtl/corrected/canonical_reference \
-            experiments/rtl/corrected/cap_nonblocking_corrected_decoder.sv \
             experiments/rtl/corrected/r2/cap_r2_normal_decoder.sv \
+            experiments/rtl/corrected/r2/cap_r2_split_phase_decoder.sv \
             experiments/rtl/corrected/r2/canonical/cap_canonical_replay_pair_top.sv \
             "$GITHUB_WORKSPACE/experiments/rtl/corrected/canonical_reference/cap_canonical_replay_verilator.cc" \
             --Mdir /tmp/r2_replay_obj \
@@ -164,7 +163,7 @@ jobs:
           pattern: r2-replay-shard-*-${{ github.run_id }}
           path: /tmp/r2_replay_all
           merge-multiple: true
-      - name: Aggregate R2 distributions
+      - name: Aggregate split-phase R2 distributions and apply cycle gate
         run: |
           mkdir -p r2_replay_aggregate
           python3 experiments/rtl/corrected/r2/canonical/analyze_r2_replay.py \

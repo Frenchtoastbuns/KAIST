@@ -3,7 +3,7 @@ set -euo pipefail
 
 TOP=${1:?usage: synth_r2_cap.sh <top>}
 case "$TOP" in
-  cap_nonblocking_normal_top|cap_r2_normal_top) ;;
+  cap_r2_normal_top|cap_r2_split_normal_top) ;;
   *) echo "unsupported residual CAP top: $TOP" >&2; exit 2 ;;
 esac
 
@@ -13,8 +13,8 @@ OUT="experiments/results/r2_cap_synthesis/$TOP"
 mkdir -p "$OUT"
 
 cat > "$OUT/synth.ys" <<YOSYS
-read_verilog -sv -I experiments/rtl/corrected experiments/rtl/corrected/cap_nonblocking_corrected_decoder.sv
 read_verilog -sv experiments/rtl/corrected/r2/cap_r2_normal_decoder.sv
+read_verilog -sv experiments/rtl/corrected/r2/cap_r2_split_phase_decoder.sv
 hierarchy -check -top $TOP
 check -assert
 synth_xilinx -family xc7 -top $TOP

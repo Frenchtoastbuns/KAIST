@@ -25,10 +25,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - variant: clean-normal
-            top: cap_nonblocking_normal_top
-          - variant: r2-normal
+          - variant: r2-baseline
             top: cap_r2_normal_top
+          - variant: r2-split-phase
+            top: cap_r2_split_normal_top
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
@@ -41,8 +41,8 @@ jobs:
         run: |
           iverilog -g2012 -I experiments/rtl/corrected \
             -s ${{ matrix.top }} -o /tmp/r2_cap.vvp \
-            experiments/rtl/corrected/cap_nonblocking_corrected_decoder.sv \
-            experiments/rtl/corrected/r2/cap_r2_normal_decoder.sv
+            experiments/rtl/corrected/r2/cap_r2_normal_decoder.sv \
+            experiments/rtl/corrected/r2/cap_r2_split_phase_decoder.sv
       - name: Xilinx-7 synthesis only
         run: |
           bash experiments/rtl/corrected/r2/synth_r2_cap.sh ${{ matrix.top }}
@@ -103,9 +103,12 @@ jobs:
                   'dsp48':dsp,
                   'total_cells':int(module.get('num_cells',0)),
               })
-          expected={'cap_nonblocking_normal_top','cap_r2_normal_top'}
+          expected={'cap_r2_normal_top','cap_r2_split_normal_top'}
           if {record['top'] for record in records}!=expected:
               raise SystemExit(f'missing or unexpected tops: {records}')
+          split=next(record for record in records if record['top']=='cap_r2_split_normal_top')
+          if split['bram18_equivalent']>41:
+              raise SystemExit(f"split-phase BRAM gate failed: {split['bram18_equivalent']} > 41")
           Path('aggregate/summary.json').write_text(json.dumps(records,indent=2,sort_keys=True)+'\n')
           with open('aggregate/summary.csv','w',newline='') as handle:
               writer=csv.DictWriter(handle,fieldnames=list(records[0]))
