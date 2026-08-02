@@ -24,8 +24,13 @@ xvlog "$GLBL" | tee -a xvlog.log
 xelab cap_r2_post_route_tb glbl -L unisims_ver -L secureip \
   --timescale 1ns/1ps -s r2_postroute | tee xelab.log
 
-cat > run_full.tcl <<'TCL'
+# The same full 1,000-frame routed functional simulation supplies both the
+# equivalence CSV and the SAIF activity used for the paper power comparison.
+cat > run_full.tcl <<TCL
+open_saif $SIM_DIR/activity_1000.saif
+log_saif [get_objects -r /cap_r2_post_route_tb/dut/*]
 run all
+close_saif
 quit
 TCL
 xsim r2_postroute \
@@ -35,23 +40,6 @@ xsim r2_postroute \
   -testplusarg "CSV=$SIM_DIR/postroute_1000.csv" \
   -tclbatch run_full.tcl | tee postroute_1000.log
 grep -q '^POST_ROUTE_REPLAY_PASS start=0 count=1000 errors=0$' postroute_1000.log
-
-# Use the first 100 frozen frames for activity annotation. Functional
-# equivalence still covers all 1,000 frames above.
-cat > run_power.tcl <<TCL
-open_saif $SIM_DIR/activity_100.saif
-log_saif [get_objects -r /cap_r2_post_route_tb/dut/*]
-run all
-close_saif
-quit
-TCL
-xsim r2_postroute \
-  -testplusarg "TRACE=$TRACE_HEX" \
-  -testplusarg "START=0" \
-  -testplusarg "COUNT=100" \
-  -testplusarg "CSV=$SIM_DIR/postroute_power_100.csv" \
-  -tclbatch run_power.tcl | tee postroute_power_100.log
-grep -q '^POST_ROUTE_REPLAY_PASS start=0 count=100 errors=0$' postroute_power_100.log
-test -s activity_100.saif
+test -s activity_1000.saif
 
 printf 'POST_ROUTE_SIM_PASS top=%s\n' "$TOP"
