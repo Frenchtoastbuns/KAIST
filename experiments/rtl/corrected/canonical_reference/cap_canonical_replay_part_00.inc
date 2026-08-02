@@ -24,11 +24,10 @@ constexpr uint64_t FNV_OFFSET=1469598103934665603ULL;
 constexpr uint64_t FNV_PRIME=1099511628211ULL;
 constexpr uint32_t EXPECTED_HEADER_BYTES=96;
 constexpr uint32_t EXPECTED_RECORD_BYTES=1778;
-// The normal ABI is the validated R2 baseline in the split-phase experiment.
-// Candidate LUTs are intentionally left unavailable here and joined from the
-// fresh synthesis artifact; replay must not bake in an estimated area result.
-constexpr uint64_t NORMAL_LUTS=34590ULL;
-constexpr uint64_t S45_LUTS=0ULL;
+// Fresh Xilinx-7 synthesis counts for the validated split-phase experiment,
+// run 30740536873 at head 03798f914ad073e93114e787783cb70207d04d6a.
+constexpr uint64_t NORMAL_LUTS=34589ULL;
+constexpr uint64_t S45_LUTS=34800ULL;
 
 using Rows=std::array<std::array<uint8_t,K>,GROUPS>;
 using Phi=std::array<std::array<uint16_t,STATES>,GROUPS>;
@@ -55,4 +54,3 @@ struct Frame {
     uint8_t reference_tie=0;
     uint64_t payload_checksum=0;
 };
-
