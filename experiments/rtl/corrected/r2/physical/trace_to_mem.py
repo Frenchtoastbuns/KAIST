@@ -33,7 +33,7 @@ def main() -> None:
     if data[:8] != b"CAPCAN1\0":
         raise SystemExit("bad trace magic")
 
-    values = struct.unpack_from("<10Ii5Q", data, 8)
+    values = struct.unpack_from("<11Ii5Q", data, 8)
     version, header_bytes, record_bytes, frames = values[:4]
     n, k, order, groups, states, group_bits = values[4:10]
     soft_scale, ebn0_milli = values[10:12]
