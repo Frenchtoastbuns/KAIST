@@ -251,10 +251,9 @@ module cap_r2_split_normal_core #(
     reg [METRIC_W-1:0] q_sum_threshold;
     reg [METRIC_W+4:0] q_sum_w1;
     reg [METRIC_W+4:0] q_sum_w2;
-    reg q_result_valid;
-    reg q_result_pass;
-    reg [1:0] q_result_context;
-    reg q_result_depth3;
+    wire q_sum_pass =
+        (q_sum_has_w1 && q_sum_w1<=q_sum_threshold) ||
+        (q_sum_has_w2 && q_sum_w2<=q_sum_threshold);
     integer sumg;
     integer arb_index;
     reg [METRIC_W+4:0] query_total_w1;
@@ -436,7 +435,7 @@ module cap_r2_split_normal_core #(
             best_metric<=INF_METRIC; best_tep<=0; best_tied<=0;
             score_issues<=0; bound_row_cycles<=0; context_wait_cycles<=0;
             max_task_occupancy<=0; max_bound_waiters<=0;
-            q_rr<=0; q_mem_valid<=0; q_sum_valid<=0; q_result_valid<=0;
+            q_rr<=0; q_mem_valid<=0; q_sum_valid<=0;
             task_we<=0; task_re<=0; task_count<=0; task_head<=0;
             pop_phase<=0; pop_context<=0;
             d_state<=D_IDLE; gen_i<=0; gen_j<=1;
@@ -459,7 +458,7 @@ module cap_r2_split_normal_core #(
             end
         end else begin
             build_done<=0; decode_done<=0;
-            task_we<=0; task_re<=0; q_result_valid<=0;
+            task_we<=0; task_re<=0;
             for (lane=0;lane<CONTEXTS;lane=lane+1) score_in_valid[lane]<=0;
 
             if (build_start && !build_busy && !decode_busy) begin
@@ -530,15 +529,11 @@ module cap_r2_split_normal_core #(
                 q_sum_threshold<=q_mem_threshold;
             end
 
-            // One tagged result can retire every cycle.  A stale captured U
-            // may only admit extra work; it cannot prune a valid winner.
+            // One tagged sum becomes available every cycle.  The context
+            // consumes it directly below, avoiding a redundant response
+            // register.  A stale captured U may only admit extra work; it
+            // cannot prune a valid winner.
             if (q_sum_valid) begin
-                q_result_valid<=1;
-                q_result_pass<=
-                    (q_sum_has_w1 && q_sum_w1<=q_sum_threshold) ||
-                    (q_sum_has_w2 && q_sum_w2<=q_sum_threshold);
-                q_result_context<=q_sum_context;
-                q_result_depth3<=q_sum_depth3;
                 bound_row_cycles<=bound_row_cycles+q_sum_has_w1+q_sum_has_w2;
             end
 
@@ -605,7 +600,7 @@ module cap_r2_split_normal_core #(
                 max_task_occupancy<=0; max_bound_waiters<=0;
                 task_count<=0; task_head<=0; pop_phase<=0;
                 gen_i<=0; gen_j<=1;
-                q_rr<=0; q_mem_valid<=0; q_sum_valid<=0; q_result_valid<=0;
+                q_rr<=0; q_mem_valid<=0; q_sum_valid<=0;
                 for (lane=0;lane<CONTEXTS;lane=lane+1) begin
                     ctx_state[lane]<=C_IDLE;
                     for (stage=0;stage<SCORE_LATENCY;stage=stage+1)
@@ -683,15 +678,15 @@ module cap_r2_split_normal_core #(
                             else ctx_state[grant_ctx]<=C_BOUND2_WAIT;
                         end
 
-                        if (q_result_valid) begin
-                            if (q_result_depth3) begin
-                                if (q_result_pass) ctx_state[q_result_context]<=C_LEAF;
-                                else ctx_state[q_result_context]<=C_DEPTH3;
+                        if (q_sum_valid) begin
+                            if (q_sum_depth3) begin
+                                if (q_sum_pass) ctx_state[q_sum_context]<=C_LEAF;
+                                else ctx_state[q_sum_context]<=C_DEPTH3;
                             end else begin
-                                if (q_result_pass) begin
-                                    ctx_r3[q_result_context]<=ctx_next[q_result_context];
-                                    ctx_state[q_result_context]<=C_DEPTH3;
-                                end else ctx_state[q_result_context]<=C_IDLE;
+                                if (q_sum_pass) begin
+                                    ctx_r3[q_sum_context]<=ctx_next[q_sum_context];
+                                    ctx_state[q_sum_context]<=C_DEPTH3;
+                                end else ctx_state[q_sum_context]<=C_IDLE;
                             end
                         end
 
@@ -727,7 +722,7 @@ module cap_r2_split_normal_core #(
                         end
 
                         if (task_head==task_count && pop_phase==0 && all_contexts_idle &&
-                            !q_mem_valid && !q_sum_valid && !q_result_valid)
+                            !q_mem_valid && !q_sum_valid)
                             d_state<=D_DRAIN;
                     end
                     D_DRAIN: begin
