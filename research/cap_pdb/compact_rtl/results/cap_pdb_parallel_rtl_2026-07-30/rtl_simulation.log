@@ -1,0 +1,6 @@
+PASS lanes=1 sum=24 cycles=4
+PASS lanes=2 sum=24 cycles=3
+PASS lanes=4 sum=24 cycles=2
+PASS lanes=8 sum=24 cycles=2
+PASS lanes=16 sum=24 cycles=2
+PASS dual_port lanes=2 sum=24 cycles=3

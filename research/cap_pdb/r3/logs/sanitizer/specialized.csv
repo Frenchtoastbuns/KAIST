@@ -1,0 +1,2 @@
+frame,frame_hash,stream_checksum,teps,scoring_calls,bound_checks,compact_lookups,dual_solver_ops,dual_updates,dual_group_solves,oracle_candidates,oracle_w1_candidates,oracle_w2_candidates,oracle_primitive_ops,dual_witness_candidates,dual_witness_primitive_ops,score_primitive_ops,total_primitive_ops,ops_w1,ops_w2,ops_w3,structural_checks,word_mismatch,metric_mismatch,tie_mismatch
+0,4307900441458573662,4307900441458573662,183000,184075,41370,3190327,57627323,50182,652366,0,0,0,0,652366,43872348,11780800,116512168,17729686,34775949,5121688,2560,0,0,0

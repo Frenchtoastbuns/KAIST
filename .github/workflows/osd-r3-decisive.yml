@@ -1,0 +1,27 @@
+name: OSD R3 decisive smoke
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "research/cap_pdb/r3/**"
+      - ".github/workflows/osd-r3-decisive.yml"
+
+jobs:
+  fused-dual-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify evidence checksums
+        working-directory: research/cap_pdb/r3
+        run: sha256sum -c SHA256SUMS.txt
+      - name: Verify committed 1,000-frame evidence
+        run: python3 research/cap_pdb/r3/scripts/verify_decisive.py
+      - name: Build and replay one frame for every variant
+        run: |
+          research/cap_pdb/r3/run_full.sh 1 "${RUNNER_TEMP}/osd-r3-smoke"
+          python3 research/cap_pdb/r3/scripts/verify_decisive.py \
+            --results-dir "${RUNNER_TEMP}/osd-r3-smoke" \
+            --frames 1 \
+            --expected-structural-checks 4096

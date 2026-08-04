@@ -3,6 +3,15 @@ This is a work in progress and a long overdue attempt to bring all our coding-re
 Before using any of this you should enter the tests directory and execute "make".
 This will check if your compiler is able to create binaries that are able to produce correct results when executed.
 
+## CAP-PDB OSD research
+
+The exact CAP-PDB branch-and-bound research, frozen evidence, and reproducibility
+scripts are organized under [`research/cap_pdb`](research/cap_pdb). The production
+normal/split-phase R2 RTL and physical-design flow remain under
+[`experiments/rtl/corrected/r2`](experiments/rtl/corrected/r2).
+
+Start with the [current research status](research/cap_pdb/STATUS.md).
+
 What we have included so far:
 
 ### [crc.hh](crc.hh)
@@ -167,4 +176,3 @@ SIMD<int8_t, SIZE> rotate(SIMD<int8_t, SIZE> input, int shift, int WIDTH)
 	return output;
 }
 ```
-

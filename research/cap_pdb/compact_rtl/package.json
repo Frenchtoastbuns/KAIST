@@ -1,0 +1,12 @@
+{
+  "name": "cap-pdb-compact-rtl-evidence",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "synth": "node --experimental-wasm-exnref rtl/run_parallel_compact_synthesis.mjs",
+    "synth:dual-port": "node --experimental-wasm-exnref rtl/run_dual_port_compact_synthesis.mjs"
+  },
+  "devDependencies": {
+    "@yowasp/yosys": "0.65.176-dev.1145"
+  }
+}

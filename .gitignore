@@ -1,1 +1,9 @@
 .*.swp
+
+# CAP-PDB local reproductions
+__pycache__/
+*.pyc
+research/cap_pdb/**/node_modules/
+research/cap_pdb/r3/r3_decisive_audit
+research/cap_pdb/r3/reproduced/
+research/cap_pdb/compact_rtl/compact_parallel_trace_audit

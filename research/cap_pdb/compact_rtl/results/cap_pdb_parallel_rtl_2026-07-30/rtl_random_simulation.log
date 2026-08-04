@@ -1,0 +1,5 @@
+PASS random lanes=1 queries=64
+PASS random lanes=2 queries=64
+PASS random lanes=4 queries=64
+PASS random lanes=8 queries=64
+PASS random lanes=16 queries=64

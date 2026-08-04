@@ -1,0 +1,2 @@
+fused_w1w2 frame 1/1 absolute=0 teps=2202 dual_ops=4930380 total_ops=54958028
+FINAL mode=fused_w1w2 frames=1 start_frame=0 ebn0_db=0.000 seed=5928218492399464753 generator_hash=15049493467287215415 stream_checksum=4307900441458573662 structural_checks=2560 mismatches=0/0/0

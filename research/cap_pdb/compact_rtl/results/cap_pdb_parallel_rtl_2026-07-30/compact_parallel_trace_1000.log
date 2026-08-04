@@ -1,0 +1,1 @@
+configuration=eBCH(128,64),OSD-4,BPSK-AWGN,0dB,frames=1000,seed=5928218492399464753,stream_checksum=11508365490867720138,mismatches=0
