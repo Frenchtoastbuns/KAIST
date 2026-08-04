@@ -1,0 +1,9 @@
+architecture,lanes,estimated_lcs,luts,ffs,ramb18e1,dsp48e1,structural_errors,memory_organization
+normal_cap_query,1,1807,1878,100,143,1,0,narrow_state_addressed
+compact_allocation,1,3301,3566,735,143,0,0,narrow_state_addressed
+compact_state_wide,1,17012,19619,670,195,0,0,325x512_per_group
+compact_state_wide,2,17179,19796,670,195,0,0,325x512_per_group
+compact_state_wide,4,17757,20974,670,195,0,0,325x512_per_group
+compact_state_wide,8,18551,23107,670,195,0,0,325x512_per_group
+compact_state_wide,16,20371,27758,670,195,0,0,325x512_per_group
+compact_dual_read_yosys,2,5855,6951,801,286,0,0,two_read_narrow_yosys_replicated

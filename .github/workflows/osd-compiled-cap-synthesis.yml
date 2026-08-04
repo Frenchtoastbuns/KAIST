@@ -1,0 +1,18 @@
+name: OSD historical compiled CAP synthesis
+
+# Historical area-feasibility workflow for the audited blocking RTL.
+# It is intentionally manual-only.  Corrected normal/S45 synthesis is handled
+# by osd-corrected-synthesis.yml; S48 remains dropped from active development.
+on:
+  workflow_dispatch:
+
+jobs:
+  historical-synthesis:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Historical workflow notice
+        run: |
+          echo 'This workflow preserves the earlier area-feasibility experiment.'
+          echo 'Do not use it for corrected throughput or correctness claims.'

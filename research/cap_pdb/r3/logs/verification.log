@@ -1,0 +1,6 @@
+PASS specialized: frames=1000 checksum=11508365490867720138 mismatches=0/0/0
+PASS fused_specialized: frames=1000 checksum=11508365490867720138 mismatches=0/0/0
+PASS fused_w1: frames=1000 checksum=11508365490867720138 mismatches=0/0/0
+PASS fused_w1w2: frames=1000 checksum=11508365490867720138 mismatches=0/0/0
+PASS common frame hashes: 1000
+Frozen seed=5928218492399464753 generator_hash=15049493467287215415

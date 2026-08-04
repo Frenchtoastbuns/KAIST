@@ -1,0 +1,180 @@
+name: OSD residual-order-two canonical replay
+
+on:
+  push:
+    branches:
+      - osd-nonblocking-corrected-20260731
+    paths:
+      - 'experiments/rtl/corrected/r2/**'
+      - 'experiments/rtl/corrected/canonical_reference/**'
+      - 'experiments/rtl/corrected/cap_nb_part_*.svh'
+      - 'experiments/rtl/corrected/cap_nonblocking_corrected_decoder.sv'
+      - '.github/workflows/osd-r2-canonical-replay.yml'
+  pull_request:
+    branches:
+      - master
+    paths:
+      - 'experiments/rtl/corrected/r2/**'
+      - 'experiments/rtl/corrected/canonical_reference/**'
+      - 'experiments/rtl/corrected/cap_nb_part_*.svh'
+      - 'experiments/rtl/corrected/cap_nonblocking_corrected_decoder.sv'
+      - '.github/workflows/osd-r2-canonical-replay.yml'
+  workflow_dispatch:
+
+jobs:
+  export-frozen-trace:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build canonical C++ exporter
+        run: |
+          g++ -std=c++17 -O3 -Wall -Wextra -pedantic \
+            -I experiments/rtl/corrected/canonical_reference \
+            experiments/rtl/corrected/canonical_reference/export_canonical_trace.cc \
+            -o /tmp/export_canonical_trace
+      - name: Export and verify frozen 1,000-frame trace
+        run: |
+          mkdir -p experiments/results/r2_canonical_trace
+          /tmp/export_canonical_trace \
+            --frames 1000 \
+            --seed 5928218492399464753 \
+            --output experiments/results/r2_canonical_trace/canonical_cap_trace.bin \
+            --manifest experiments/results/r2_canonical_trace/canonical_cap_trace_manifest.json \
+            | tee experiments/results/r2_canonical_trace/export.log
+          grep -q 'CANONICAL_TRACE_PASS frames=1000 seed=5928218492399464753 stream_checksum=11508365490867720138 generator_checksum=15049493467287215415 trace_checksum=332897943003122562 tie_frames=8 record_bytes=1778' \
+            experiments/results/r2_canonical_trace/export.log
+          echo 'c3cd084c4aa8c457f87d0d72efb8c81c8fc8385b635be7b91117c1a881ae2f5a  experiments/results/r2_canonical_trace/canonical_cap_trace.bin' \
+            | sha256sum -c -
+          sha256sum experiments/results/r2_canonical_trace/canonical_cap_trace.bin \
+            > experiments/results/r2_canonical_trace/canonical_cap_trace.sha256
+      - name: Upload frozen canonical trace
+        uses: actions/upload-artifact@v4
+        with:
+          name: r2-canonical-trace-${{ github.run_id }}
+          path: experiments/results/r2_canonical_trace/
+          if-no-files-found: error
+
+  build-replay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Verilator
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y verilator g++ make
+      - name: Build baseline-R2 versus split-phase-R2 simulator
+        run: |
+          verilator --cc --exe --build -j 2 -O3 -Wno-fatal \
+            --top-module cap_canonical_replay_pair_top \
+            -Iexperiments/rtl/corrected/canonical_reference \
+            experiments/rtl/corrected/r2/cap_r2_normal_decoder.sv \
+            experiments/rtl/corrected/r2/cap_r2_split_phase_decoder.sv \
+            experiments/rtl/corrected/r2/canonical/cap_canonical_replay_pair_top.sv \
+            "$GITHUB_WORKSPACE/experiments/rtl/corrected/canonical_reference/cap_canonical_replay_verilator.cc" \
+            --Mdir /tmp/r2_replay_obj \
+            -CFLAGS '-O3 -std=c++17'
+          mkdir -p experiments/results/r2_replay_bin
+          cp /tmp/r2_replay_obj/Vcap_canonical_replay_pair_top \
+            experiments/results/r2_replay_bin/
+      - name: Upload replay simulator
+        uses: actions/upload-artifact@v4
+        with:
+          name: r2-replay-bin-${{ github.run_id }}
+          path: experiments/results/r2_replay_bin/Vcap_canonical_replay_pair_top
+          if-no-files-found: error
+
+  replay-50:
+    needs: [export-frozen-trace, build-replay]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: r2-canonical-trace-${{ github.run_id }}
+          path: /tmp/r2_trace
+      - uses: actions/download-artifact@v4
+        with:
+          name: r2-replay-bin-${{ github.run_id }}
+          path: /tmp/r2_bin
+      - name: Run 50-frame correctness gate
+        run: |
+          BIN=$(find /tmp/r2_bin -type f -name Vcap_canonical_replay_pair_top -print -quit)
+          TRACE=$(find /tmp/r2_trace -type f -name canonical_cap_trace.bin -print -quit)
+          chmod +x "$BIN"
+          mkdir -p replay_50
+          "$BIN" --trace "$TRACE" --start 0 --count 50 \
+            --csv replay_50/r2_0_50.csv | tee replay_50/r2_0_50.log
+          grep -q 'CANONICAL_REPLAY_PASS start=0 count=50 errors=0' replay_50/r2_0_50.log
+      - name: Upload 50-frame evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r2-replay-50-${{ github.run_id }}
+          path: replay_50/
+          if-no-files-found: warn
+
+  replay-1000:
+    needs: replay-50
+    strategy:
+      fail-fast: true
+      max-parallel: 20
+      matrix:
+        start: [0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 800, 850, 900, 950]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: r2-canonical-trace-${{ github.run_id }}
+          path: /tmp/r2_trace
+      - uses: actions/download-artifact@v4
+        with:
+          name: r2-replay-bin-${{ github.run_id }}
+          path: /tmp/r2_bin
+      - name: Replay canonical 50-frame shard
+        run: |
+          BIN=$(find /tmp/r2_bin -type f -name Vcap_canonical_replay_pair_top -print -quit)
+          TRACE=$(find /tmp/r2_trace -type f -name canonical_cap_trace.bin -print -quit)
+          chmod +x "$BIN"
+          mkdir -p replay_shard
+          "$BIN" --trace "$TRACE" --start ${{ matrix.start }} --count 50 \
+            --csv replay_shard/r2_${{ matrix.start }}.csv \
+            | tee replay_shard/r2_${{ matrix.start }}.log
+          grep -q 'CANONICAL_REPLAY_PASS start=${{ matrix.start }} count=50 errors=0' \
+            replay_shard/r2_${{ matrix.start }}.log
+      - name: Upload R2 shard
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r2-replay-shard-${{ matrix.start }}-${{ github.run_id }}
+          path: replay_shard/
+          if-no-files-found: warn
+
+  aggregate-1000:
+    needs: replay-1000
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: r2-replay-shard-*-${{ github.run_id }}
+          path: /tmp/r2_replay_all
+          merge-multiple: true
+      - name: Aggregate split-phase R2 distributions and apply cycle gate
+        run: |
+          mkdir -p r2_replay_aggregate
+          python3 experiments/rtl/corrected/r2/canonical/analyze_r2_replay.py \
+            --glob '/tmp/r2_replay_all/r2_*.csv' \
+            --out r2_replay_aggregate \
+            | tee r2_replay_aggregate/aggregate.log
+          grep -q '^R2_CANONICAL_REPLAY_AGGREGATE_PASS$' \
+            r2_replay_aggregate/aggregate.log
+      - name: Upload per-frame and aggregate evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: r2-canonical-replay-aggregate-${{ github.run_id }}
+          path: r2_replay_aggregate/
+          if-no-files-found: error

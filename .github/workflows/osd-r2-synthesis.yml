@@ -1,0 +1,125 @@
+name: OSD residual-order-two synthesis
+
+on:
+  push:
+    branches:
+      - osd-nonblocking-corrected-20260731
+    paths:
+      - 'experiments/rtl/corrected/r2/**'
+      - 'experiments/rtl/corrected/cap_nb_part_*.svh'
+      - 'experiments/rtl/corrected/cap_nonblocking_corrected_decoder.sv'
+      - '.github/workflows/osd-r2-synthesis.yml'
+  pull_request:
+    branches:
+      - master
+    paths:
+      - 'experiments/rtl/corrected/r2/**'
+      - 'experiments/rtl/corrected/cap_nb_part_*.svh'
+      - 'experiments/rtl/corrected/cap_nonblocking_corrected_decoder.sv'
+      - '.github/workflows/osd-r2-synthesis.yml'
+  workflow_dispatch:
+
+jobs:
+  synthesize:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: r2-baseline
+            top: cap_r2_normal_top
+          - variant: r2-split-phase
+            top: cap_r2_split_normal_top
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install synthesis tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yosys iverilog
+      - name: Syntax and elaboration check
+        run: |
+          iverilog -g2012 -I experiments/rtl/corrected \
+            -s ${{ matrix.top }} -o /tmp/r2_cap.vvp \
+            experiments/rtl/corrected/r2/cap_r2_normal_decoder.sv \
+            experiments/rtl/corrected/r2/cap_r2_split_phase_decoder.sv
+      - name: Xilinx-7 synthesis only
+        run: |
+          bash experiments/rtl/corrected/r2/synth_r2_cap.sh ${{ matrix.top }}
+          grep -q 'Found and reported 0 problems' \
+            experiments/results/r2_cap_synthesis/${{ matrix.top }}/yosys.log
+      - name: Upload synthesis evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r2-cap-synth-${{ matrix.variant }}-${{ github.run_id }}
+          path: experiments/results/r2_cap_synthesis/${{ matrix.top }}/
+          if-no-files-found: warn
+
+  aggregate:
+    needs: synthesize
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: r2-cap-synth-*-${{ github.run_id }}
+          path: /tmp/r2_synth
+      - name: Aggregate production resource counts
+        run: |
+          mkdir -p aggregate
+          python3 - <<'PY' | tee aggregate/summary.txt
+          import csv
+          import glob
+          import json
+          import re
+          from pathlib import Path
+
+          records=[]
+          for stat_path in sorted(glob.glob('/tmp/r2_synth/**/stat.json',recursive=True)):
+              directory=Path(stat_path).parent
+              data=json.loads(Path(stat_path).read_text())
+              modules=data.get('modules',{})
+              if len(modules)!=1:
+                  raise SystemExit(f'unexpected module count in {stat_path}: {list(modules)}')
+              module_name,module=next(iter(modules.items()))
+              top=module_name.lstrip('\\')
+              cells=module.get('num_cells_by_type',{})
+              lut=sum(int(cells.get(name,0)) for name in ['LUT1','LUT2','LUT3','LUT4','LUT5','LUT6','LUT6_2'])
+              ff=sum(int(value) for name,value in cells.items() if name.startswith(('FDRE','FDSE','FDCE','FDPE')))
+              bram18=sum(int(value) for name,value in cells.items() if name.startswith('RAMB18'))
+              bram36=sum(int(value) for name,value in cells.items() if name.startswith('RAMB36'))
+              dsp=sum(int(value) for name,value in cells.items() if name.startswith('DSP48'))
+              text=(directory/'stat_xilinx.txt').read_text()
+              match=re.search(r'Estimated number of LCs:\s*(\d+)',text)
+              records.append({
+                  'top':top,
+                  'estimated_lcs':int(match.group(1)) if match else None,
+                  'lut_primitives':lut,
+                  'ffs':ff,
+                  'ramb18':bram18,
+                  'ramb36':bram36,
+                  'bram18_equivalent':bram18+2*bram36,
+                  'dsp48':dsp,
+                  'total_cells':int(module.get('num_cells',0)),
+              })
+          expected={'cap_r2_normal_top','cap_r2_split_normal_top'}
+          if {record['top'] for record in records}!=expected:
+              raise SystemExit(f'missing or unexpected tops: {records}')
+          split=next(record for record in records if record['top']=='cap_r2_split_normal_top')
+          if split['bram18_equivalent']>41:
+              raise SystemExit(f"split-phase BRAM gate failed: {split['bram18_equivalent']} > 41")
+          Path('aggregate/summary.json').write_text(json.dumps(records,indent=2,sort_keys=True)+'\n')
+          with open('aggregate/summary.csv','w',newline='') as handle:
+              writer=csv.DictWriter(handle,fieldnames=list(records[0]))
+              writer.writeheader();writer.writerows(records)
+          print(json.dumps(records,indent=2,sort_keys=True))
+          print('R2_SYNTHESIS_PASS')
+          PY
+          grep -q '^R2_SYNTHESIS_PASS$' aggregate/summary.txt
+      - name: Upload aggregate synthesis report
+        uses: actions/upload-artifact@v4
+        with:
+          name: r2-cap-synthesis-aggregate-${{ github.run_id }}
+          path: aggregate/
+          if-no-files-found: error

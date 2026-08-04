@@ -1,0 +1,93 @@
+name: OSD R2 physical-flow lint
+
+on:
+  push:
+    branches:
+      - osd-nonblocking-corrected-20260731
+    paths:
+      - 'experiments/rtl/corrected/r2/physical/**'
+      - '.github/workflows/osd-r2-physical-gate.yml'
+      - '.github/workflows/osd-r2-physical-lint.yml'
+  pull_request:
+    branches:
+      - master
+    paths:
+      - 'experiments/rtl/corrected/r2/physical/**'
+      - '.github/workflows/osd-r2-physical-gate.yml'
+      - '.github/workflows/osd-r2-physical-lint.yml'
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install open-source syntax tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y iverilog g++
+      - name: Check Python and shell syntax
+        run: |
+          python3 -m py_compile \
+            experiments/rtl/corrected/r2/physical/trace_to_mem.py \
+            experiments/rtl/corrected/r2/physical/analyze_physical_gate.py
+          bash -n experiments/rtl/corrected/r2/physical/run_postroute_sim.sh
+      - name: Reproduce frozen trace and memory image
+        run: |
+          g++ -std=c++17 -O3 -Wall -Wextra -pedantic \
+            -I experiments/rtl/corrected/canonical_reference \
+            experiments/rtl/corrected/canonical_reference/export_canonical_trace.cc \
+            -o /tmp/export_canonical_trace
+          /tmp/export_canonical_trace \
+            --frames 1000 \
+            --seed 5928218492399464753 \
+            --output /tmp/canonical_cap_trace.bin \
+            --manifest /tmp/canonical_cap_trace_manifest.json \
+            | tee /tmp/export.log
+          python3 experiments/rtl/corrected/r2/physical/trace_to_mem.py \
+            /tmp/canonical_cap_trace.bin /tmp/canonical_cap_trace.hex \
+            --manifest /tmp/frozen_manifest.json
+          test "$(wc -l < /tmp/canonical_cap_trace.hex)" = 1778096
+      - name: Compile post-route testbench against both source tops
+        run: |
+          iverilog -g2012 -DDUT_MODULE=cap_r2_normal_top \
+            -s cap_r2_post_route_tb -o /tmp/r2_baseline_tb.vvp \
+            experiments/rtl/corrected/r2/cap_r2_normal_decoder.sv \
+            experiments/rtl/corrected/r2/physical/post_route_tb.sv
+          iverilog -g2012 -DDUT_MODULE=cap_r2_split_normal_top \
+            -s cap_r2_post_route_tb -o /tmp/r2_split_tb.vvp \
+            experiments/rtl/corrected/r2/cap_r2_split_phase_decoder.sv \
+            experiments/rtl/corrected/r2/physical/post_route_tb.sv
+      - name: Smoke-test hard-gate arithmetic
+        run: |
+          python3 - <<'PY'
+          import csv, json
+          from pathlib import Path
+          for name, fmax, cycles, power, luts in [
+              ('baseline', 200.0, 155481, 1.0, 34000),
+              ('split', 190.0, 116848, 0.98, 34600),
+          ]:
+              root = Path('/tmp/physical') / name
+              (root / 'postroute_sim').mkdir(parents=True)
+              route = {
+                  'part':'xc7v-test','vivado_version':'Vivado test',
+                  'target_period_ns':5.0,'clock_uncertainty_ns':0.2,
+                  'wns_ns':0.1,'tns_ns':0.0,'estimated_fmax_mhz':fmax,
+                  'routed_luts':luts,'routed_ffs':10000,
+                  'bram18_equivalent':41,'dsp48':3,
+              }
+              (root/'route_metrics.json').write_text(json.dumps(route))
+              with (root/'postroute_sim/postroute_1000.csv').open('w',newline='') as handle:
+                  writer=csv.writer(handle)
+                  writer.writerow(['frame','metric','mask','tie','build_cycles','decode_cycles','total_cycles','score_issues','bound_rows','context_wait','max_task_occupancy','max_bound_waiters','errors'])
+                  for frame in range(1000):
+                      writer.writerow([frame,1,'0x0',0,8065,cycles-8065,cycles,1,1,1,1,1,0])
+              (root/'power_saif.rpt').write_text(f'| Dynamic (W) | {power} |\n')
+          PY
+          mkdir -p /tmp/physical/report
+          python3 experiments/rtl/corrected/r2/physical/analyze_physical_gate.py \
+            --baseline-dir /tmp/physical/baseline \
+            --split-dir /tmp/physical/split \
+            --out /tmp/physical/report \
+            | tee /tmp/physical/report/analysis.log
+          grep -q '^R2_PHYSICAL_GATE_PASS$' /tmp/physical/report/analysis.log

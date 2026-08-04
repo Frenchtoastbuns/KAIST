@@ -1,0 +1,6 @@
+# configuration=eBCH(128,64),OSD-4,BPSK-AWGN,0dB,frames=1000,seed=5928218492399464753,frame_checksum=11508365490867720138
+method,frames,unique_teps_per_frame,scoring_calls_per_frame,bound_checks_per_frame,pdb_lookups_per_frame,compact_lookups_per_frame,dual_queries_per_frame,dual_dp_transitions_per_frame,compiled_dual_lookups_per_frame,compiled_dual_build_transitions_per_frame,incumbent_syncs_per_frame,incumbent_batch_items_per_frame,auxiliary_bytes_per_frame,unique_tep_reduction_vs_classical_percent,word_mismatches,metric_mismatches,tie_mismatches
+classical_osd,1000,679121,679121,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+normal_cap_pdb,1000,354436.866,359351.052,38309.324,422511.596,0.000,0.000,0.000,0.000,0.000,86.638,352849.384,605603.916,47.809,0,0,0
+compact_two_block_cap_pdb,1000,286815.344,291318.811,37849.176,0.000,2933108.308,0.000,0.000,0.000,0.000,70.028,284817.143,605603.916,57.767,0,0,0
+dual_two_block_cap_pdb,1000,120231.949,122762.403,37065.315,0.000,2926548.603,30311.315,145707721.666,0.000,0.000,28.877,116260.735,605603.916,82.296,0,0,0

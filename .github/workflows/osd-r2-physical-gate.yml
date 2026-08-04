@@ -1,0 +1,168 @@
+name: OSD R2 physical-design publication gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      part:
+        description: Exact lab Virtex-7 part (for example xc7v...)
+        required: true
+        type: string
+      vivado_version:
+        description: Exact required Vivado version string reported by vivado -version
+        required: true
+        type: string
+      target_period_ns:
+        description: Common lab clock constraint in ns; must close for both designs
+        required: true
+        type: string
+      clock_uncertainty_ns:
+        description: Common setup clock uncertainty in ns
+        required: true
+        default: '0.20'
+        type: string
+
+jobs:
+  freeze-trace:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build canonical exporter
+        run: |
+          g++ -std=c++17 -O3 -Wall -Wextra -pedantic \
+            -I experiments/rtl/corrected/canonical_reference \
+            experiments/rtl/corrected/canonical_reference/export_canonical_trace.cc \
+            -o /tmp/export_canonical_trace
+      - name: Regenerate and freeze canonical trace
+        run: |
+          mkdir -p frozen_trace
+          /tmp/export_canonical_trace \
+            --frames 1000 \
+            --seed 5928218492399464753 \
+            --output frozen_trace/canonical_cap_trace.bin \
+            --manifest frozen_trace/export_manifest.json \
+            | tee frozen_trace/export.log
+          grep -q 'stream_checksum=11508365490867720138' frozen_trace/export.log
+          grep -q 'generator_checksum=15049493467287215415' frozen_trace/export.log
+          grep -q 'trace_checksum=332897943003122562' frozen_trace/export.log
+          echo 'c3cd084c4aa8c457f87d0d72efb8c81c8fc8385b635be7b91117c1a881ae2f5a  frozen_trace/canonical_cap_trace.bin' \
+            | sha256sum -c -
+          python3 experiments/rtl/corrected/r2/physical/trace_to_mem.py \
+            frozen_trace/canonical_cap_trace.bin \
+            frozen_trace/canonical_cap_trace.hex \
+            --manifest frozen_trace/frozen_manifest.json \
+            | tee frozen_trace/trace_to_mem.log
+      - name: Upload frozen trace
+        uses: actions/upload-artifact@v4
+        with:
+          name: r2-frozen-trace-${{ github.run_id }}
+          path: frozen_trace/
+          if-no-files-found: error
+
+  implement:
+    needs: freeze-trace
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: baseline
+            top: cap_r2_normal_top
+          - variant: split
+            top: cap_r2_split_normal_top
+    runs-on: [self-hosted, linux, x64, vivado]
+    timeout-minutes: 720
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: r2-frozen-trace-${{ github.run_id }}
+          path: /tmp/r2_frozen_trace
+      - name: Verify selected Vivado installation
+        run: |
+          command -v vivado
+          command -v xvlog
+          command -v xelab
+          command -v xsim
+          vivado -version | tee vivado_version.txt
+          grep -F '${{ inputs.vivado_version }}' vivado_version.txt
+      - name: Route frozen R2 design
+        env:
+          R2_TOP: ${{ matrix.top }}
+          R2_PART: ${{ inputs.part }}
+          R2_PERIOD_NS: ${{ inputs.target_period_ns }}
+          R2_UNCERTAINTY_NS: ${{ inputs.clock_uncertainty_ns }}
+          R2_OUT_DIR: ${{ github.workspace }}/experiments/results/r2_physical/${{ matrix.variant }}
+        run: |
+          mkdir -p "$R2_OUT_DIR"
+          vivado -mode batch -notrace \
+            -source experiments/rtl/corrected/r2/physical/run_impl.tcl \
+            | tee "$R2_OUT_DIR/vivado_impl.log"
+          grep -q "R2_IMPLEMENTATION_PASS top=${R2_TOP}" "$R2_OUT_DIR/vivado_impl.log"
+      - name: Replay all 1,000 frames on routed functional netlist
+        run: |
+          chmod +x experiments/rtl/corrected/r2/physical/run_postroute_sim.sh
+          experiments/rtl/corrected/r2/physical/run_postroute_sim.sh \
+            '${{ matrix.top }}' \
+            experiments/results/r2_physical/${{ matrix.variant }} \
+            /tmp/r2_frozen_trace/canonical_cap_trace.hex \
+            | tee experiments/results/r2_physical/${{ matrix.variant }}/postroute_driver.log
+      - name: Generate SAIF-annotated routed power report
+        env:
+          R2_ROUTED_DCP: ${{ github.workspace }}/experiments/results/r2_physical/${{ matrix.variant }}/routed.dcp
+          R2_SAIF: ${{ github.workspace }}/experiments/results/r2_physical/${{ matrix.variant }}/postroute_sim/activity_1000.saif
+          R2_OUT_DIR: ${{ github.workspace }}/experiments/results/r2_physical/${{ matrix.variant }}
+        run: |
+          vivado -mode batch -notrace \
+            -source experiments/rtl/corrected/r2/physical/report_power.tcl \
+            | tee "$R2_OUT_DIR/vivado_power.log"
+          grep -q '^R2_SAIF_POWER_PASS ' "$R2_OUT_DIR/vivado_power.log"
+      - name: Upload routed evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r2-physical-${{ matrix.variant }}-${{ github.run_id }}
+          path: experiments/results/r2_physical/${{ matrix.variant }}/
+          if-no-files-found: error
+          retention-days: 90
+
+  aggregate:
+    needs: implement
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: r2-physical-baseline-${{ github.run_id }}
+          path: /tmp/r2_physical/baseline
+      - uses: actions/download-artifact@v4
+        with:
+          name: r2-physical-split-${{ github.run_id }}
+          path: /tmp/r2_physical/split
+      - name: Apply frozen publication gates
+        id: gate
+        shell: bash
+        run: |
+          mkdir -p physical_gate
+          set +e
+          python3 experiments/rtl/corrected/r2/physical/analyze_physical_gate.py \
+            --baseline-dir /tmp/r2_physical/baseline \
+            --split-dir /tmp/r2_physical/split \
+            --out physical_gate \
+            2>&1 | tee physical_gate/analysis.log
+          status=${PIPESTATUS[0]}
+          set -e
+          echo "$status" > physical_gate/exit_status.txt
+          exit 0
+      - name: Upload publication gate report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r2-physical-publication-gate-${{ github.run_id }}
+          path: physical_gate/
+          if-no-files-found: error
+          retention-days: 90
+      - name: Enforce decision
+        run: |
+          test "$(cat physical_gate/exit_status.txt)" = 0
+          grep -q '^R2_PHYSICAL_GATE_PASS$' physical_gate/analysis.log

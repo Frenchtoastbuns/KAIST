@@ -1,0 +1,224 @@
+name: OSD corrected CAP batch validation
+
+on:
+  push:
+    branches:
+      - osd-nonblocking-corrected-20260731
+    paths:
+      - 'experiments/rtl/corrected/cap_nonblocking_corrected_decoder.sv'
+      - 'experiments/rtl/corrected/cap_nb_part_*.svh'
+      - 'experiments/rtl/corrected/cap_nonblocking_pair_top.sv'
+      - 'experiments/rtl/corrected/cap_corrected_batch_verilator.cc'
+      - '.github/workflows/osd-corrected-batch.yml'
+  pull_request:
+    branches:
+      - master
+    paths:
+      - 'experiments/rtl/corrected/cap_nonblocking_corrected_decoder.sv'
+      - 'experiments/rtl/corrected/cap_nb_part_*.svh'
+      - 'experiments/rtl/corrected/cap_nonblocking_pair_top.sv'
+      - 'experiments/rtl/corrected/cap_corrected_batch_verilator.cc'
+      - '.github/workflows/osd-corrected-batch.yml'
+  workflow_dispatch:
+
+jobs:
+  build-and-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Verilator
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y verilator g++ make
+      - name: Verify committed Verilator-compatible reset spelling
+        run: |
+          grep -Fq 'for (k=0;k<=K;k=k+1) info_prefix[k]=0;' \
+            experiments/rtl/corrected/cap_nb_part_03.svh
+          ! grep -Fq 'for (k=0;k<=K;k=k+1) info_prefix[k]<=0;' \
+            experiments/rtl/corrected/cap_nb_part_03.svh
+      - name: Build paired RTL simulator
+        run: |
+          verilator --cc --exe --build -j 2 -O3 -Wno-fatal \
+            --top-module cap_nonblocking_pair_top \
+            -Iexperiments/rtl/corrected \
+            experiments/rtl/corrected/cap_nonblocking_corrected_decoder.sv \
+            experiments/rtl/corrected/cap_nonblocking_pair_top.sv \
+            "$GITHUB_WORKSPACE/experiments/rtl/corrected/cap_corrected_batch_verilator.cc" \
+            --Mdir /tmp/cap_batch_obj \
+            -CFLAGS "-O3 -std=c++17"
+          mkdir -p experiments/results/corrected_batch_bin
+          cp /tmp/cap_batch_obj/Vcap_nonblocking_pair_top experiments/results/corrected_batch_bin/
+      - name: Run one-frame smoke
+        run: |
+          mkdir -p experiments/results/corrected_batch_smoke
+          experiments/results/corrected_batch_bin/Vcap_nonblocking_pair_top \
+            --start 0 --count 1 \
+            --csv experiments/results/corrected_batch_smoke/batch_0.csv \
+            | tee experiments/results/corrected_batch_smoke/batch_0.log
+          grep -q 'BATCH_SUMMARY start=0 count=1 errors=0' experiments/results/corrected_batch_smoke/batch_0.log
+      - name: Upload simulator
+        uses: actions/upload-artifact@v4
+        with:
+          name: corrected-cap-verilator-bin-${{ github.run_id }}
+          path: experiments/results/corrected_batch_bin/Vcap_nonblocking_pair_top
+          if-no-files-found: error
+      - name: Upload smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: corrected-cap-verilator-smoke-${{ github.run_id }}
+          path: experiments/results/corrected_batch_smoke/
+          if-no-files-found: warn
+
+  batch-50:
+    needs: build-and-smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: corrected-cap-verilator-bin-${{ github.run_id }}
+          path: /tmp/cap_batch_bin
+      - name: Run 50-frame exactness and utilisation gate
+        run: |
+          BIN=$(find /tmp/cap_batch_bin -type f -name Vcap_nonblocking_pair_top -print -quit)
+          chmod +x "$BIN"
+          mkdir -p experiments/results/corrected_batch_50
+          "$BIN" --start 0 --count 50 \
+            --csv experiments/results/corrected_batch_50/batch_0_50.csv \
+            | tee experiments/results/corrected_batch_50/batch_0_50.log
+          grep -q 'BATCH_SUMMARY start=0 count=50 errors=0' experiments/results/corrected_batch_50/batch_0_50.log
+      - name: Upload 50-frame evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: corrected-cap-50-frames-${{ github.run_id }}
+          path: experiments/results/corrected_batch_50/
+          if-no-files-found: warn
+
+  batch-1000:
+    needs: batch-50
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        start: [0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 800, 850, 900, 950]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: corrected-cap-verilator-bin-${{ github.run_id }}
+          path: /tmp/cap_batch_bin
+      - name: Run 50-frame shard
+        run: |
+          BIN=$(find /tmp/cap_batch_bin -type f -name Vcap_nonblocking_pair_top -print -quit)
+          chmod +x "$BIN"
+          mkdir -p experiments/results/corrected_batch_shard
+          "$BIN" --start ${{ matrix.start }} --count 50 \
+            --csv experiments/results/corrected_batch_shard/batch_${{ matrix.start }}.csv \
+            | tee experiments/results/corrected_batch_shard/batch_${{ matrix.start }}.log
+          grep -q 'BATCH_SUMMARY start=${{ matrix.start }} count=50 errors=0' experiments/results/corrected_batch_shard/batch_${{ matrix.start }}.log
+      - name: Upload shard evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: corrected-cap-batch-shard-${{ matrix.start }}-${{ github.run_id }}
+          path: experiments/results/corrected_batch_shard/
+          if-no-files-found: warn
+
+  aggregate-1000:
+    needs: batch-1000
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: corrected-cap-batch-shard-*-${{ github.run_id }}
+          path: /tmp/cap_batch_all
+          merge-multiple: true
+      - name: Verify and aggregate all 1,000 frames
+        run: |
+          mkdir -p aggregate
+          python3 - <<'PY' | tee aggregate/aggregate.txt
+          import csv
+          import glob
+          import json
+          from pathlib import Path
+
+          rows = []
+          for path in sorted(glob.glob('/tmp/cap_batch_all/batch_*.csv')):
+              with open(path, newline='') as handle:
+                  rows.extend(csv.DictReader(handle))
+
+          frames = [int(row['frame']) for row in rows]
+          expected_frames = list(range(1000))
+          if len(rows) != 1000:
+              raise SystemExit(f'expected 1000 rows, found {len(rows)}')
+          if sorted(frames) != expected_frames:
+              raise SystemExit('frame coverage is not exactly 0..999')
+          if len(set(frames)) != 1000:
+              raise SystemExit('duplicate frame identifiers detected')
+
+          mismatches = 0
+          tie_frames = 0
+          for row in rows:
+              exp_metric = int(row['expected_metric'])
+              exp_mask = int(row['expected_mask'], 0)
+              exp_tie = int(row['expected_tie'])
+              tie_frames += exp_tie
+              checks = (
+                  int(row['normal_metric']) == exp_metric,
+                  int(row['normal_mask'], 0) == exp_mask,
+                  int(row['normal_tie']) == exp_tie,
+                  int(row['s45_metric']) == exp_metric,
+                  int(row['s45_mask'], 0) == exp_mask,
+                  int(row['s45_tie']) == exp_tie,
+                  int(row['errors']) == 0,
+              )
+              if not all(checks):
+                  mismatches += 1
+
+          def total(name):
+              return sum(int(row[name]) for row in rows)
+
+          normal_cycles = total('normal_decode_cycles')
+          s45_cycles = total('s45_decode_cycles')
+          normal_issues = total('normal_issues')
+          s45_issues = total('s45_issues')
+          result = {
+              'frames': 1000,
+              'mismatch_frames': mismatches,
+              'tie_frames': tie_frames,
+              'normal_build_cycles_mean': total('normal_build_cycles') / 1000.0,
+              's45_build_cycles_mean': total('s45_build_cycles') / 1000.0,
+              'normal_decode_cycles_total': normal_cycles,
+              's45_decode_cycles_total': s45_cycles,
+              'normal_decode_cycles_mean': normal_cycles / 1000.0,
+              's45_decode_cycles_mean': s45_cycles / 1000.0,
+              'normal_issue_pulses': normal_issues,
+              's45_issue_pulses': s45_issues,
+              'normal_scorer_utilisation': normal_issues / (4.0 * normal_cycles),
+              's45_scorer_utilisation': s45_issues / (4.0 * s45_cycles),
+              'normal_over_s45_cycle_ratio': normal_cycles / s45_cycles,
+              'normal_bound_rows_total': total('normal_bound_rows'),
+              's45_bound_rows_total': total('s45_bound_rows'),
+              'normal_context_wait_total': total('normal_wait'),
+              's45_context_wait_total': total('s45_wait'),
+          }
+          if mismatches:
+              raise SystemExit(f'{mismatches} frame mismatches')
+          Path('aggregate/aggregate.json').write_text(json.dumps(result, indent=2, sort_keys=True) + '\n')
+          print(json.dumps(result, indent=2, sort_keys=True))
+          print('BATCH_1000_PASS')
+          PY
+          grep -q '^BATCH_1000_PASS$' aggregate/aggregate.txt
+      - name: Upload aggregate evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: corrected-cap-1000-aggregate-${{ github.run_id }}
+          path: aggregate/
+          if-no-files-found: error

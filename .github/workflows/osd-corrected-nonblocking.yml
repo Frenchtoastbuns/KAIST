@@ -1,0 +1,63 @@
+name: OSD corrected nonblocking validation
+
+on:
+  push:
+    branches:
+      - osd-nonblocking-corrected-20260731
+    paths:
+      - 'experiments/rtl/corrected/cap_nonblocking_corrected_decoder.sv'
+      - 'experiments/rtl/corrected/cap_nb_part_*.svh'
+      - 'experiments/rtl/corrected/cap_corrected_differential_tb.sv'
+      - 'experiments/rtl/corrected/generate_corrected_cap_vectors.cc'
+      - '.github/workflows/osd-corrected-nonblocking.yml'
+  pull_request:
+    branches:
+      - master
+    paths:
+      - 'experiments/rtl/corrected/cap_nonblocking_corrected_decoder.sv'
+      - 'experiments/rtl/corrected/cap_nb_part_*.svh'
+      - 'experiments/rtl/corrected/cap_corrected_differential_tb.sv'
+      - 'experiments/rtl/corrected/generate_corrected_cap_vectors.cc'
+      - '.github/workflows/osd-corrected-nonblocking.yml'
+  workflow_dispatch:
+
+jobs:
+  differential-one-frame:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y iverilog yosys g++
+      - name: Compile normal and S45 tops
+        run: |
+          iverilog -g2012 -I experiments/rtl/corrected -s cap_nonblocking_normal_top -o /tmp/normal.vvp experiments/rtl/corrected/cap_nonblocking_corrected_decoder.sv
+          iverilog -g2012 -I experiments/rtl/corrected -s cap_nonblocking_s45_top -o /tmp/s45.vvp experiments/rtl/corrected/cap_nonblocking_corrected_decoder.sv
+      - name: Generate deterministic exhaustive reference vectors
+        run: |
+          mkdir -p experiments/results/corrected_vectors
+          g++ -std=c++17 -O2 -Wall -Wextra -pedantic experiments/rtl/corrected/generate_corrected_cap_vectors.cc -o /tmp/generate_corrected_cap_vectors
+          /tmp/generate_corrected_cap_vectors experiments/results/corrected_vectors | tee experiments/results/corrected_vectors/oracle.log
+      - name: Compile differential testbench
+        run: |
+          iverilog -g2012 -I experiments/rtl/corrected -s cap_corrected_differential_tb -o /tmp/cap_corrected_diff.vvp \
+            experiments/rtl/corrected/cap_nonblocking_corrected_decoder.sv \
+            experiments/rtl/corrected/cap_corrected_differential_tb.sv
+      - name: Run one-frame differential validation
+        run: |
+          vvp /tmp/cap_corrected_diff.vvp | tee experiments/results/corrected_vectors/rtl.log
+          grep -q '^DIFFERENTIAL_PASS$' experiments/results/corrected_vectors/rtl.log
+      - name: Upload one-frame validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: corrected-cap-one-frame-${{ github.run_id }}
+          path: |
+            experiments/results/corrected_vectors/oracle.log
+            experiments/results/corrected_vectors/rtl.log
+            experiments/results/corrected_vectors/meta.txt
+            experiments/results/corrected_vectors/queries.txt
+            experiments/results/corrected_vectors/scores.txt
+          if-no-files-found: warn

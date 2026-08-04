@@ -1,0 +1,67 @@
+name: OSD canonical frame 400 diagnosis
+
+on:
+  push:
+    branches:
+      - osd-nonblocking-corrected-20260731
+    paths:
+      - 'experiments/rtl/corrected/canonical_reference/**'
+      - 'experiments/rtl/corrected/cap_nb_part_*.svh'
+      - 'experiments/rtl/corrected/cap_nonblocking_corrected_decoder.sv'
+      - '.github/workflows/osd-canonical-diagnose.yml'
+  pull_request:
+    branches:
+      - master
+    paths:
+      - 'experiments/rtl/corrected/canonical_reference/**'
+      - 'experiments/rtl/corrected/cap_nb_part_*.svh'
+      - 'experiments/rtl/corrected/cap_nonblocking_corrected_decoder.sv'
+      - '.github/workflows/osd-canonical-diagnose.yml'
+  workflow_dispatch:
+
+jobs:
+  verify-frame-400:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Verilator
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y verilator g++ make
+      - name: Build and verify frozen trace exporter
+        run: |
+          g++ -std=c++17 -O3 \
+            -I experiments/rtl/corrected/canonical_reference \
+            experiments/rtl/corrected/canonical_reference/export_canonical_trace.cc \
+            -o /tmp/export_canonical_trace
+          /tmp/export_canonical_trace --frames 1000 --seed 5928218492399464753 \
+            --output /tmp/canonical_cap_trace.bin \
+            --manifest /tmp/canonical_cap_trace_manifest.json \
+            | tee /tmp/export.log
+          grep -q 'CANONICAL_TRACE_PASS frames=1000 seed=5928218492399464753 stream_checksum=11508365490867720138 generator_checksum=15049493467287215415 trace_checksum=332897943003122562 tie_frames=8 record_bytes=1778' /tmp/export.log
+          echo 'c3cd084c4aa8c457f87d0d72efb8c81c8fc8385b635be7b91117c1a881ae2f5a  /tmp/canonical_cap_trace.bin' | sha256sum -c -
+      - name: Build diagnostic replay simulator from committed RTL
+        run: |
+          verilator --cc --exe --build -j 2 -O3 -Wno-fatal \
+            --top-module cap_canonical_replay_pair_top \
+            -Iexperiments/rtl/corrected \
+            -Iexperiments/rtl/corrected/canonical_reference \
+            experiments/rtl/corrected/cap_nonblocking_corrected_decoder.sv \
+            experiments/rtl/corrected/canonical_reference/cap_canonical_replay_pair_top.sv \
+            "$GITHUB_WORKSPACE/experiments/rtl/corrected/canonical_reference/cap_canonical_replay_verilator.cc" \
+            --Mdir /tmp/canonical_diag_obj \
+            -CFLAGS "-O3 -std=c++17"
+      - name: Verify frame 400 correction
+        run: |
+          mkdir -p diagnostic
+          /tmp/canonical_diag_obj/Vcap_canonical_replay_pair_top \
+            --trace /tmp/canonical_cap_trace.bin --start 400 --count 1 --diagnose \
+            --csv diagnostic/frame400.csv 2>&1 | tee diagnostic/frame400.log
+          grep -q '^CANONICAL_REPLAY_PASS start=400 count=1 errors=0' diagnostic/frame400.log
+      - name: Upload diagnostic evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: canonical-frame400-diagnostic-${{ github.run_id }}
+          path: diagnostic/
+          if-no-files-found: error
